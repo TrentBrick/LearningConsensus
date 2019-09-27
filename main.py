@@ -6,7 +6,7 @@ import time
 
 def main():
 
-    model.zero_grad()
+    #model.zero_grad()
 
     init_e = curr_ep
     
@@ -17,7 +17,7 @@ def main():
     while curr_ep < (epochs+init_e):  
         print('Epoch', curr_ep)
 
-        model.zero_grad()
+        #model.zero_grad()
 
         curr_ep_trajectory_logs = []
 
@@ -28,9 +28,11 @@ def main():
 
             single_run_trajectory_log = []
 
-            #initialize the values and which agents are byzantine
+            #initialize the values and which agents are byzantine. 
+            # agent_list is all agents, honest and byzantine are subsets. 
             agent_list, honest_list, byzantine_list = initStatesandAgents()
 
+            round_counter = 0
             #until honest parties commit values (simulation terminates)
             while not honestPartiesCommit(honest_list):
 
@@ -42,19 +44,27 @@ def main():
                     round.append( (state, action) )
 
                 # log the current state and action
+
+                print('round', round_counter, ' values: ', round)
+
                 single_run_trajectory_log.append(round) # list of list of vectors
 
                 # resolve the new states: 
                 for agent in agent_list: 
-                    updateStates()
+                    updateStates(agent_list)
 
                 # keep making more actions, storing all 
                 # of them along with the states and rewards
+                round_counter+=1
+
+            print('single trajectory over:', single_run_trajectory_log)
 
             # upon termination, calculate the terminal reward:
             # currently just checking if the agents satisfied consistency and validity
             # recieves a tuple of the form honest reward, byzantine reward
             reward = giveReward(honest_list)
+
+            print('reward for iter:', reward)
 
             # storing in loggers
             ep_rewards.append(reward)

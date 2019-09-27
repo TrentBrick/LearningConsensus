@@ -2,10 +2,13 @@ import numpy as np
 import itertools
 from collections import OrderedDict
 from config import *
+from nn import *
 
 def toOneHot(state):
     oh = []
+    #print('full state for an agent', state)
     for s in state:
+        #print('state for one hot',s)
         oh.append(oneHotMapper[s])
     return np.asarray(oh).T # now each column is one of the states. 
 
@@ -14,11 +17,14 @@ class Agent:
         self.isByzantine = isByzantine
         self.agentID = agentID
         if isByzantine:
-            self.brain = byz_policy
+            self.brain = randomActions
+            '''self.brain = byz_policy'''
         else: 
-            self.brain = honest_policy
+            self.brain = randomActions
+            '''self.brain = honest_policy'''
         self.actionSpace = getActionSpace(isByzantine, byzantine_inds) 
         init_val = np.random.choice(commit_vals, 1)[0]
+        self.initVal = init_val
         initState = [init_val]
         for a in range(num_agents-1):
             initState.append(null_message_val)
@@ -36,9 +42,10 @@ class Agent:
             # look at the current state and decide what action to take. 
             oh = toOneHot(self.state) # each column is one of the states. 
             #making a decision:
-            probabilities = self.brain(oh)
+            self.action = self.brain(self.actionSpace)
+            '''probabilities = self.brain(oh)
             action_ind = torch.max(probabilities)
-            self.action = self.actionSpace[action_ind]
+            self.action = self.actionSpace[action_ind]'''
 
             if self.action.split('_')[0]== 'commit': # checking for a commit. 
                 self.commitValue(self.action.split('_')[1])
@@ -49,26 +56,26 @@ def updateStates(agent_list):
     #look at all agent actions and update the state of each to accomodate actions
 
     for reciever in agent_list:
-        new_state = [reciever.initState]
+        new_state = [reciever.initVal]
         for actor in agent_list:
             if actor == reciever: # check if agent committed. 
                 continue
             # dont need to check if committed a value as already will prevent 
             # from taking any actions other than no send. 
-            new_state.append( actionEffect(actor.action) )
+            new_state.append( actionEffect(actor.action, reciever.agentID) )
 
         reciever.state = new_state
 
 def actionEffect(action, receiver_id):
     # return the effects of a particular action
 
-    if action == 'no_send' or action.split('_')[0]=='commit'
+    if action == 'no_send' or action.split('_')[0]=='commit':
         return null_message_val
 
-    elif action.contains('to_all'):
+    elif 'to_all' in action:
         return int(action.split('_')[-1])
     
-    elif action.contains('agent-'+str(receiver_id)):
+    elif 'agent-'+str(receiver_id) in action:
         # getting the first value of this. 
         return int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
 
@@ -161,7 +168,7 @@ def giveReward(honest_parties):
     starting_values = []
     for h in honest_parties:
         com_values.append(h.committed_value)
-        starting_values.append(h.initState)
+        starting_values.append(h.initVal)
 
     #checking if all the same value
     if len(set(com_values)) !=1:
@@ -175,11 +182,6 @@ def giveReward(honest_parties):
             return (-1, 1)
 
     return (1, -1)
-
-def checkConsistency(honest_parties):
-
-
-def checkValidity(honest_parties):
 
 def getEnv(scenario, num_agents, commit_vals):
 

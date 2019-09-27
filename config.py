@@ -47,18 +47,21 @@ if load_policy:
     print("LOADING IN A policy, load_policy=True")
     #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
 
-'''else: 
+else: 
     if scenario=='Basic':
-        honest_policy = BasicPolicyHonest(device).to(device)
-        byz_policy = BasicPolicyByz(device).to(device)
+        #honest_policy = BasicPolicyHonest(device).to(device)
+        #byz_policy = BasicPolicyByz(device).to(device)
+        pass
 
+    # cant be 0 else later on there is division by zero!
     curr_ep = 1 
 
-policy.train()
+#policy.train()
+#optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
 
-optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
-mem_pin = False'''
-# cant be 0 else later on there is division by zero!
+mem_pin = False
+
+
 # lip=15 if want this see Protein AE code to add it. 
 
 # RL Settings
