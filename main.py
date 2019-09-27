@@ -50,14 +50,18 @@ def main():
                 # choose new actions: 
                 for agent in agent_list: 
 
-                    if round_counter>max_round_len: # force the honest agents to commit to a value. 
-                        state, action, action_logprob = agent.chooseAction(curr_temperature, forceCommit=True)
-                    else: 
-                        state, action, action_logprob = agent.chooseAction(curr_temperature)
+                    if type(agent.committed_value) is int:      # dont change to True! Either it is False or a real value. 
+                        action, action_logprob = agent.action, 0
+                    else:
+                        if round_counter>max_round_len: # force the honest agents to commit to a value. 
+                            action, action_logprob = agent.chooseAction(curr_temperature, forceCommit=True)
+                        else: 
+                            action, action_logprob = agent.chooseAction(curr_temperature)
+                    
                     try: 
-                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, state, action, action_logprob ))
+                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, agent.state, action, action_logprob ))
                     except: 
-                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, state, action, action_logprob) ]
+                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, agent.state, action, action_logprob) ]
 
 
                 # log the current state and action
@@ -68,6 +72,11 @@ def main():
 
                 # keep making more actions, storing all 
                 # of them along with the states and rewards
+
+                if round_counter> max_round_len:
+                    print('too many rounds!!!', round_counter)
+                    #print(single_run_trajectory_log)
+
                 round_counter+=1
 
             #print('single trajectory over:', single_run_trajectory_log)
@@ -113,10 +122,15 @@ def main():
         # get all of the relevant metrics. eg. loss.item()
 
         if (curr_ep % print_every == 0):
+            print('=============================')
             print('Current Epoch is: ', curr_ep)
             print('Current Temperature is:' , curr_temperature)
             print('last trajectory from this epoch:')
             print(curr_ep_trajectory_logs[-1])
+            print('very first!')
+            print(curr_ep_trajectory_logs[0])
+            print('=============================')
+            print('=============================')
             #print useful information. 
 
         curr_ep += 1

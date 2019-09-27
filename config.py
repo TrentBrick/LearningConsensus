@@ -101,7 +101,7 @@ print('this script is running first, numb of agents is: ', num_agents)
 # Training Settings
 epochs = 500
 iters_per_epoch = 500
-max_round_len=100 # max number of rounds before termination of the current simulation
+max_round_len=15 # max number of rounds before termination of the current simulation
 print_every = 1
 
 # NN Settings
@@ -136,9 +136,9 @@ mem_pin = False
 # clip=15 if want this see Protein AE code to add it. 
 
 # RL Settings
-starting_temp = 5
-temp_anneal = 0.99
-temp_fix_point = 0.8
+starting_temp = 4
+temp_anneal = 0.995
+temp_fix_point = 1
 rl_algo = vpg
 steps_per_epoch=4000
 gamma=0.99

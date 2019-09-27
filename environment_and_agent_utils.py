@@ -34,43 +34,46 @@ class Agent:
         self.state = self.initState
         self.committed_value = False
 
-    def commitValue(self, value):
-        self.committed_value = value
+    '''def commitValue(self, value):
+        self.committed_value = value'''
 
     def chooseAction(self, temperature, forceCommit=False):
-        if self.committed_value == True: # dont allow to take any actions. just keep committing.  
-            self.action = 'commit_'+str(self.committed_value)
-            action_logprob = 0
-        else: 
-            # look at the current state and decide what action to take. 
-            oh = toOneHot(self.state) # each column is one of the states. 
-            #making a decision:
-            #self.action = self.brain(self.actionSpace)
-            # expects softmax to be applied to network first.
-            logits = self.brain(oh)
+   
+        # look at the current state and decide what action to take. 
+        oh = toOneHot(self.state) # each column is one of the states. 
+        #making a decision:
+        #self.action = self.brain(self.actionSpace)
+        # expects softmax to be applied to network first.
+        logits = self.brain(oh)
 
-            if forceCommit:
-                if not self.isByzantine: #if it is an honest agent
-                    commit_inds = [ ind for ind, a in enumerate(self.actionSpace) if 'commit' in a ]
-                    logits = logits[commit_inds] # make it so that the only logits are those for committing. 
+        if forceCommit:
+            if not self.isByzantine: #if it is an honest agent
+                commit_inds = [ ind for ind, a in enumerate(self.actionSpace) if 'commit' in a ]
+                logits = logits[commit_inds] # make it so that the only logits are those for committing. 
 
-            real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=0)) # currently not vectorized
-            #should be able to apply sampling without computing this twice... 
-            temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=0) 
-            action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
-            action_logprob = real_logprobs[action_ind]
-            self.action = self.actionSpace[action_ind]
+        real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=0)) # currently not vectorized
+        #should be able to apply sampling without computing this twice... 
+        temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=0) 
+        action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
+        action_logprob = real_logprobs[action_ind]
+        
+        self.action = self.actionSpace[action_ind]
 
-            if self.action.split('_')[0]== 'commit': # checking for a commit. 
-                self.commitValue(self.action.split('_')[1])
+        if forceCommit: # if forcecommit, convert the chosen action back to commit and action space relevance. 
+            if not self.isByzantine:
+                self.action = self.actionSpace[ commit_inds[action_ind] ]
 
-        return self.state, self.action, action_logprob
+        if 'commit' in self.action: # checking for a commit. 
+            self.committed_value = int(self.action.split('_')[1])
+
+        return self.action, action_logprob
             
 def updateStates(agent_list):
     #look at all agent actions and update the state of each to accomodate actions
 
     for reciever in agent_list:
-        new_state = [reciever.initVal]
+        new_state = [reciever.initVal] # keep track of the agent's initial value, 
+        #want to show to the NN each time
         for actor in agent_list:
             if actor == reciever: # check if agent committed. 
                 continue
@@ -138,13 +141,13 @@ def giveReward(honest_parties):
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
-        if starting_values != com_values:
-            return (-1, 1)
+        if starting_values != com_values:   
+            return (-2, 1)
 
     return (1, -1)
 
 def honestPartiesCommit(honest_list):
     for h in honest_list:
-        if not h.committed_value:
+        if type(h.committed_value) is bool:
             return False
     return True
