@@ -6,9 +6,11 @@ import time
 
 def main():
 
-    #model.zero_grad()
+    honest_policy.zero_grad()
+    byz_policy.zero_grad()
 
     init_e = curr_ep
+    curr_temperature=starting_temp
     
     #first_ep_first_batch_only=None
 
@@ -17,7 +19,10 @@ def main():
     while curr_ep < (epochs+init_e):  
         print('Epoch', curr_ep)
 
-        #model.zero_grad()
+        curr_temperature = curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
+
+        honest_policy.zero_grad()
+        byz_policy.zero_grad()
 
         curr_ep_trajectory_logs = []
 
@@ -26,7 +31,7 @@ def main():
         for iter_in_ep in range(iters_per_epoch):
             #run the environment. 
 
-            single_run_trajectory_log = []
+            single_run_trajectory_log = dict()
 
             #initialize the values and which agents are byzantine. 
             # agent_list is all agents, honest and byzantine are subsets. 
@@ -35,19 +40,22 @@ def main():
             round_counter = 0
             #until honest parties commit values (simulation terminates)
             while not honestPartiesCommit(honest_list):
-
-                round = []
-
                 # choose new actions: 
                 for agent in agent_list: 
-                    state, action = agent.chooseAction()
-                    round.append( (state, action) )
+
+                    if round_counter>max_round_len: # force the honest agents to commit to a value. 
+                        state, action, action_logprob = agent.chooseAction(curr_temperature, forceCommit=True)
+                    else: 
+                        state, action, action_logprob = agent.chooseAction(curr_temperature)
+                    try: 
+                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, state, action, action_logprob) )
+                    except: 
+                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, state, action, action_logprob) ]
+
 
                 # log the current state and action
 
                 print('round', round_counter, ' values: ', round)
-
-                single_run_trajectory_log.append(round) # list of list of vectors
 
                 # resolve the new states: 
                 for agent in agent_list: 
@@ -68,20 +76,24 @@ def main():
 
             # storing in loggers
             ep_rewards.append(reward)
-            single_run_trajectory_log.append(reward)
+            single_run_trajectory_log['reward'] = reward
             curr_ep_trajectory_logs.append(single_run_trajectory_log)
 
-        total_trajectory_logs.append(curr_ep_trajectory_logs)
+        total_trajectory_logs.append(curr_ep_trajectory_logs, )
 
         #compute the loss using the RL algorithm
         honest_reward = sum([ s[0] for s in ep_rewards ])
         byz_reward = sum([ s[1] for s in ep_rewards ])
         
-        '''loss = 
+        losses = rl_algo(curr_ep_trajectory_logs)
+        honest_loss = losses[0]
+        byz_loss = losses[1]
 
-        loss.backward()
+        honest_loss.backward()
+        byz_loss.backward()
 
-        optimizer.step()'''
+        honest_optimizer.step()
+        byz_optimizer.step()
 
         # get all of the relevant metrics. eg. loss.item()
 

@@ -10,18 +10,19 @@ def toOneHot(state):
     for s in state:
         #print('state for one hot',s)
         oh.append(oneHotMapper[s])
-    return np.asarray(oh).T # now each column is one of the states. 
+    oh = np.asarray(oh).T # now each column is one of the states.
+    return oh.flatten() 
 
 class Agent:
     def __init__(self, isByzantine, agentID, byzantine_inds=None):
         self.isByzantine = isByzantine
         self.agentID = agentID
         if isByzantine:
-            self.brain = randomActions
-            '''self.brain = byz_policy'''
+            #self.brain = randomActions
+            self.brain = byz_policy
         else: 
-            self.brain = randomActions
-            '''self.brain = honest_policy'''
+            #self.brain = randomActions
+            self.brain = honest_policy
         self.actionSpace = getActionSpace(isByzantine, byzantine_inds) 
         init_val = np.random.choice(commit_vals, 1)[0]
         self.initVal = init_val
@@ -35,22 +36,33 @@ class Agent:
     def commitValue(self, value):
         self.committed_value = value
 
-    def chooseAction(self):
+    def chooseAction(self, temperature, forceCommit=False):
         if self.committed_value != False: # dont allow to take any actions. just keep committing.  
             self.action = 'commit_'+str(self.committed_value)
         else: 
             # look at the current state and decide what action to take. 
             oh = toOneHot(self.state) # each column is one of the states. 
             #making a decision:
-            self.action = self.brain(self.actionSpace)
-            '''probabilities = self.brain(oh)
-            action_ind = torch.max(probabilities)
-            self.action = self.actionSpace[action_ind]'''
+            #self.action = self.brain(self.actionSpace)
+            # expects softmax to be applied to network first.
+            logits = self.brain(oh)
+
+            if forceCommit:
+                if not self.isByzantine: #if it is an honest agent
+                commit_inds = [ ind for ind, a in enumerate(self.actionSpace) if 'commit' in a ]
+                logits = logits[commit_inds] # make it so that the only logits are those for committing. 
+
+            real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=0)) # currently not vectorized
+            #should be able to apply sampling without computing this twice... 
+            temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=0) 
+            action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
+            action_logprob = real_logprobs[action_ind]
+            self.action = self.actionSpace[action_ind]
 
             if self.action.split('_')[0]== 'commit': # checking for a commit. 
                 self.commitValue(self.action.split('_')[1])
 
-        return self.state, self.action
+        return self.state, self.action, action_logprob
             
 def updateStates(agent_list):
     #look at all agent actions and update the state of each to accomodate actions
@@ -105,60 +117,6 @@ def initStatesandAgents():
 
     return agent_list, honest_list, byzantine_list
 
-
-def getActionSpace(isByzantine, byzantine_inds=None):
-
-    # making the action space. 
-    # this depends on if the agent is Byzantine or not. 
-    ## if byzantine then global view over all Byzantines, 
-    # means that the same agent gets to act multiple times in the round
-    # for honest, they only currently have option to send to everyone. 
-    parties = set(range(num_agents))
-    if scenario == 'Basic':
-
-        action_space = ['no_send']
-
-        if isByzantine:
-            # no point in sending messages to other Byzantines as the central agent knows what the states are
-            # but do have v granular send options. 
-            # and no commit option
-            # get every possible combination of sending actions possible
-            
-            # remove the honest agents. 
-            non_byzantines = list(range(0, num_agents))
-            for byzantine_ind in byzantine_inds:
-                non_byzantines.remove(byzantine_ind)
-            #for val in commit_vals:
-            #    non_byzantines.append('v'+str(val)) # add in the possible values that can be sent
-
-            # this code is tricky, I get all combinations of the honest agents to send to
-            # and then interleave in all permutations of the values that can be sent to them. 
-            # for example a subset of them is: : 
-            ''''send_agent-2_value-0',
-            'send_agent-1_value-0_agent-3_value-0',
-            'send_agent-1_value-0_agent-2_value-1_agent-3_value-1',
-            'send_agent-1_value-1_agent-3_value-1',
-            'send_agent-1_value-1_agent-2_value-1_agent-3_value-0',
-            'send_agent-1_value-0_agent-2_value-0_agent-3_value-0',
-            'send_agent-1_value-1_agent-2_value-1',
-            'send_agent-2_value-1_agent-3_value-1','''
-            for choose_n in range(1, len(non_byzantines)+1):
-                commit_val_permutes = list(itertools.permutations(commit_vals*((choose_n//2)+1)))
-                for combo_el in itertools.combinations(non_byzantines, choose_n):
-                    for cvp in commit_val_permutes:
-                        string = 'send'
-                        for ind in range(choose_n):
-                            string += '_agent-'+str(combo_el[ind])+'_v-'+str(cvp[ind])
-                        action_space.append( string ) 
-            # remove any redundancies in a way that preserves order. 
-            action_space = list(OrderedDict.fromkeys(action_space))
-
-        else:
-            for commit_val in commit_vals:
-                action_space.append('send_to_all-value_'+str(commit_val)) 
-                action_space.append('commit_'+str(commit_val)) 
-
-    return action_space
 
 def giveReward(honest_parties):
     # checks to see if the honest parties have obtained both

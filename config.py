@@ -3,6 +3,66 @@
 import datetime
 import torch 
 from nn import *
+from rl_algo import *
+
+
+
+def getActionSpace(isByzantine, byzantine_inds=None):
+    '''move this to a new script that config and environment and agent utils can reference. '''
+
+    # making the action space. 
+    # this depends on if the agent is Byzantine or not. 
+    ## if byzantine then global view over all Byzantines, 
+    # means that the same agent gets to act multiple times in the round
+    # for honest, they only currently have option to send to everyone. 
+    parties = set(range(num_agents))
+    if scenario == 'Basic':
+
+        action_space = ['no_send']
+
+        if isByzantine:
+            # no point in sending messages to other Byzantines as the central agent knows what the states are
+            # but do have v granular send options. 
+            # and no commit option
+            # get every possible combination of sending actions possible
+            
+            # remove the honest agents. 
+            non_byzantines = list(range(0, num_agents))
+            for byzantine_ind in byzantine_inds:
+                non_byzantines.remove(byzantine_ind)
+            #for val in commit_vals:
+            #    non_byzantines.append('v'+str(val)) # add in the possible values that can be sent
+
+            # this code is tricky, I get all combinations of the honest agents to send to
+            # and then interleave in all permutations of the values that can be sent to them. 
+            # for example a subset of them is: : 
+            ''''send_agent-2_value-0',
+            'send_agent-1_value-0_agent-3_value-0',
+            'send_agent-1_value-0_agent-2_value-1_agent-3_value-1',
+            'send_agent-1_value-1_agent-3_value-1',
+            'send_agent-1_value-1_agent-2_value-1_agent-3_value-0',
+            'send_agent-1_value-0_agent-2_value-0_agent-3_value-0',
+            'send_agent-1_value-1_agent-2_value-1',
+            'send_agent-2_value-1_agent-3_value-1','''
+            for choose_n in range(1, len(non_byzantines)+1):
+                commit_val_permutes = list(itertools.permutations(commit_vals*((choose_n//2)+1)))
+                for combo_el in itertools.combinations(non_byzantines, choose_n):
+                    for cvp in commit_val_permutes:
+                        string = 'send'
+                        for ind in range(choose_n):
+                            string += '_agent-'+str(combo_el[ind])+'_v-'+str(cvp[ind])
+                        action_space.append( string ) 
+            # remove any redundancies in a way that preserves order. 
+            action_space = list(OrderedDict.fromkeys(action_space))
+
+        else:
+            for commit_val in commit_vals:
+                action_space.append('send_to_all-value_'+str(commit_val)) 
+                action_space.append('commit_'+str(commit_val)) 
+
+    return action_space
+
+
 
 # Experiment Settings
 experiment_base_name = 'Basic_Test_Run'
@@ -20,9 +80,11 @@ scenario = 'Basic'
 #environment = getEnv(scenario)
 #if scenario=='Basic':
 commit_vals = (0,1)
+# assumes honest and byz see current state and only current state for now. 
+state_oh_size = len(commit_vals)*(len(commit_vals)+1) # commit values one hot len * commit value+no message
 null_message_val = 2
 num_agents = 3
-num_byzantine = 1
+num_byzantine = 1 #currently will not work for any larger values!!!! 
 
 oneHotMapper = dict()
 for com_val in commit_vals:
@@ -37,11 +99,14 @@ print('this script is running first, numb of agents is: ', num_agents)
 # Training Settings
 epochs = 50
 iters_per_epoch = 10
-max_ep_len=1000 # max number of rounds before termination of the current simulation
+max_round_len=100 # max number of rounds before termination of the current simulation
 
 # NN Settings
 learning_rate=0.001
 batch_size = 32
+hidden_sizes = (32,32,)
+activation= torch.tanh
+output_activation = None # I do softmax in the env section. 
 
 if load_policy:
     print("LOADING IN A policy, load_policy=True")
@@ -49,23 +114,28 @@ if load_policy:
 
 else: 
     if scenario=='Basic':
-        #honest_policy = BasicPolicyHonest(device).to(device)
-        #byz_policy = BasicPolicyByz(device).to(device)
-        pass
 
+        honest_action_space_size = len(getActionSpace(False, byzantine_inds=None))
+        byz_action_space_size = len(getActionSpace(True, byzantine_inds=[0]))
+
+        honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation).to(device)
+        byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation).to(device)
+
+    honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=learning_rate)
+    byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=learning_rate)
     # cant be 0 else later on there is division by zero!
     curr_ep = 1 
 
-#policy.train()
-#optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
+honest_policy.train()
+byz_policy.train()
 
 mem_pin = False
-
-
-# lip=15 if want this see Protein AE code to add it. 
+# clip=15 if want this see Protein AE code to add it. 
 
 # RL Settings
-rl_algo = 'ppo'
+starting_temp = 3
+temp_anneal = 0.95
+rl_algo = vpg
 steps_per_epoch=4000
 gamma=0.99
 clip_ratio=0.2
