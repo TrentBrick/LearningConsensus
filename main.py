@@ -3,23 +3,30 @@ import torch
 from config import *
 from environment_and_agent_utils import *
 import time 
+import matplotlib.pyplot as plt
+import pickle
 
 def main():
 
     honest_policy.zero_grad()
     byz_policy.zero_grad()
 
-    init_e = curr_ep
+    curr_ep = starting_ep
     curr_temperature=starting_temp
+    temperature_tracker = []
+
+    honest_wins_total = []
     
     #first_ep_first_batch_only=None
 
     total_trajectory_logs = []
 
-    while curr_ep < (epochs+init_e):  
+    while curr_ep < (epochs+starting_ep):  
         print('Epoch', curr_ep)
 
-        curr_temperature = curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
+        if curr_temperature>temp_fix_point:
+            curr_temperature = curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
+        temperature_tracker.append(curr_temperature)
 
         honest_policy.zero_grad()
         byz_policy.zero_grad()
@@ -63,41 +70,68 @@ def main():
                 # of them along with the states and rewards
                 round_counter+=1
 
-            print('single trajectory over:', single_run_trajectory_log)
+            #print('single trajectory over:', single_run_trajectory_log)
 
             # upon termination, calculate the terminal reward:
             # currently just checking if the agents satisfied consistency and validity
             # recieves a tuple of the form honest reward, byzantine reward
             reward = giveReward(honest_list)
 
-            print('reward for iter:', reward)
+            #print('reward for iter:', reward)
 
             # storing in loggers
             ep_rewards.append(reward)
             single_run_trajectory_log['reward'] = reward
             curr_ep_trajectory_logs.append(single_run_trajectory_log)
 
-        total_trajectory_logs.append(curr_ep_trajectory_logs, )
+        total_trajectory_logs.append(curr_ep_trajectory_logs )
 
         #compute the loss using the RL algorithm
-        honest_reward = sum([ s[0] for s in ep_rewards ])
-        byz_reward = sum([ s[1] for s in ep_rewards ])
+        honest_rewards = [ 1 if s[0]==1 else 0 for s in ep_rewards  ]
+
+        #honest_wins_total += honest_rewards
+        honest_wins_total.append(sum(honest_rewards)/iters_per_epoch)
+        print( 'honest wins this epoch', sum(honest_rewards), '=============')
+        print( 'honest wins this epoch %', sum(honest_rewards)/iters_per_epoch, '=============')
+        print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
+        print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
+
+        #byz_rewards = sum([ s[1] for s in ep_rewards ])
         
         losses = rl_algo(curr_ep_trajectory_logs)
         honest_loss = losses[0]
         byz_loss = losses[1]
 
         honest_loss.backward()
-        byz_loss.backward()
+        if num_byzantine!=0:
+            byz_loss.backward()
 
         honest_optimizer.step()
-        byz_optimizer.step()
+        if num_byzantine!=0:
+            byz_optimizer.step()
 
         # get all of the relevant metrics. eg. loss.item()
 
-    if (curr_ep % print_every == 0):
-        print('Current Epoch is: ', curr_ep)
-        #print useful information. 
+        if (curr_ep % print_every == 0):
+            print('Current Epoch is: ', curr_ep)
+            print('Current Temperature is:' , curr_temperature)
+            print('last trajectory from this epoch:')
+            print(curr_ep_trajectory_logs[-1])
+            #print useful information. 
+
+        curr_ep += 1
+
+    # plot the change in temperature over time. 
+    # plot average honest win rate over time. 
+    plt.plot(range(len(honest_wins_total)), honest_wins_total, label='honest_win_%')
+    plt.plot(range(len(temperature_tracker)), temperature_tracker, label='temperature')
+    plt.xlabel('epochs')
+    plt.ylabel('\% honest wins in the epoch')
+    plt.title(str(iters_per_epoch)+' iters per epoch')
+    plt.legend()
+    plt.gcf().savefig(directory+'honest_wins-'+experiment_name+'.png', dpi=200)
+    
+    pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 
 # if the policy is better then save it. is overfitting a problem in RL? 
 

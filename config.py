@@ -66,13 +66,14 @@ def getActionSpace(isByzantine, byzantine_inds=None):
 
 
 # Experiment Settings
-experiment_base_name = 'Basic_Test_Run'
+experiment_base_name = 'Basic_Test_Run_OnlyHonest'
+directory = 'runs/'
 random_seed = 27
 
 load_policy = False
 load_name = 'Lolz'
 
-print_every = 1
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
@@ -98,9 +99,10 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 50
-iters_per_epoch = 10
+epochs = 500
+iters_per_epoch = 500
 max_round_len=100 # max number of rounds before termination of the current simulation
+print_every = 1
 
 # NN Settings
 learning_rate=0.001
@@ -125,7 +127,7 @@ else:
     honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=learning_rate)
     byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=learning_rate)
     # cant be 0 else later on there is division by zero!
-    curr_ep = 1 
+starting_ep = 1 
 
 honest_policy.train()
 byz_policy.train()
@@ -134,8 +136,9 @@ mem_pin = False
 # clip=15 if want this see Protein AE code to add it. 
 
 # RL Settings
-starting_temp = 3
-temp_anneal = 0.95
+starting_temp = 5
+temp_anneal = 0.99
+temp_fix_point = 0.8
 rl_algo = vpg
 steps_per_epoch=4000
 gamma=0.99
