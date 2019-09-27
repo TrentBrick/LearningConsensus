@@ -45,6 +45,7 @@ def vpg(curr_ep_trajectory_logs):
                         logp_rewards_sum += roundd[3] * reward
 
         logp_rewards_sum /= num_trajectories
+        logp_rewards_sum *= -1 # so that it is gradient ascent!
         losses.append(logp_rewards_sum)
 
     return losses

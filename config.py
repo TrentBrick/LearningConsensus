@@ -6,7 +6,8 @@ from nn import *
 from rl_algo import *
 
 
-
+import itertools
+from collections import OrderedDict
 def getActionSpace(isByzantine, byzantine_inds=None):
     '''move this to a new script that config and environment and agent utils can reference. '''
 
@@ -84,7 +85,7 @@ commit_vals = (0,1)
 state_oh_size = len(commit_vals)*(len(commit_vals)+1) # commit values one hot len * commit value+no message
 null_message_val = 2
 num_agents = 3
-num_byzantine = 1 #currently will not work for any larger values!!!! 
+num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
 oneHotMapper = dict()
 for com_val in commit_vals:

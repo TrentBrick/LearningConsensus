@@ -1,6 +1,5 @@
 import numpy as np 
-import itertools
-from collections import OrderedDict
+import torch
 from config import *
 from nn import *
 
@@ -10,8 +9,10 @@ def toOneHot(state):
     for s in state:
         #print('state for one hot',s)
         oh.append(oneHotMapper[s])
-    oh = np.asarray(oh).T # now each column is one of the states.
-    return oh.flatten() 
+    oh = np.asarray(oh).T.flatten() # now each column is one of the states.
+    #convert ot pytorch tensor: 
+    oh = torch.from_numpy(oh).float().to(device)
+    return oh
 
 class Agent:
     def __init__(self, isByzantine, agentID, byzantine_inds=None):
@@ -37,8 +38,9 @@ class Agent:
         self.committed_value = value
 
     def chooseAction(self, temperature, forceCommit=False):
-        if self.committed_value != False: # dont allow to take any actions. just keep committing.  
+        if self.committed_value == True: # dont allow to take any actions. just keep committing.  
             self.action = 'commit_'+str(self.committed_value)
+            action_logprob = 0
         else: 
             # look at the current state and decide what action to take. 
             oh = toOneHot(self.state) # each column is one of the states. 
@@ -49,8 +51,8 @@ class Agent:
 
             if forceCommit:
                 if not self.isByzantine: #if it is an honest agent
-                commit_inds = [ ind for ind, a in enumerate(self.actionSpace) if 'commit' in a ]
-                logits = logits[commit_inds] # make it so that the only logits are those for committing. 
+                    commit_inds = [ ind for ind, a in enumerate(self.actionSpace) if 'commit' in a ]
+                    logits = logits[commit_inds] # make it so that the only logits are those for committing. 
 
             real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=0)) # currently not vectorized
             #should be able to apply sampling without computing this twice... 
@@ -140,10 +142,6 @@ def giveReward(honest_parties):
             return (-1, 1)
 
     return (1, -1)
-
-def getEnv(scenario, num_agents, commit_vals):
-
-    pass
 
 def honestPartiesCommit(honest_list):
     for h in honest_list:

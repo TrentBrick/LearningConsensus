@@ -48,14 +48,12 @@ def main():
                     else: 
                         state, action, action_logprob = agent.chooseAction(curr_temperature)
                     try: 
-                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, state, action, action_logprob) )
+                        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, state, action, action_logprob ))
                     except: 
                         single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, state, action, action_logprob) ]
 
 
                 # log the current state and action
-
-                print('round', round_counter, ' values: ', round)
 
                 # resolve the new states: 
                 for agent in agent_list: 
