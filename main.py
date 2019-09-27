@@ -1,7 +1,7 @@
 ''' Script that is called to allow for code to be executed.  '''
 import torch 
 from config import *
-from environment_utils import *
+from environment_and_agent_utils import *
 import time 
 
 def main():
