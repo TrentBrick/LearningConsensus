@@ -124,7 +124,7 @@ def main():
         if (curr_ep % print_every == 0):
             print('=============================')
             print('Current Epoch is: ', curr_ep)
-            print('Current Temperature is:' , curr_temperature)
+            print('Current Temperature is:' , curr_temperature, '=======')
             print('last trajectory from this epoch:')
             print(curr_ep_trajectory_logs[-1])
             print('very first!')

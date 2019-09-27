@@ -142,7 +142,7 @@ def giveReward(honest_parties):
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
         if starting_values != com_values:   
-            return (-2, 1)
+            return (-1.5, 1)
 
     return (1, -1)
 
