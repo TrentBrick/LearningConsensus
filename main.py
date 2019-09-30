@@ -33,7 +33,10 @@ def main():
 
         curr_ep_trajectory_logs = []
 
-        ep_rewards = []
+        satisfied_constraints = []
+        ep_honest_reward = 0
+
+        hit_max_round_len = 0
 
         for iter_in_ep in range(iters_per_epoch):
             #run the environment. 
@@ -74,7 +77,8 @@ def main():
                 # of them along with the states and rewards
 
                 if round_counter> max_round_len:
-                    print('too many rounds!!!', round_counter)
+                    hit_max_round_len +=1
+                    #print('too many rounds!!!', round_counter)
                     #print(single_run_trajectory_log)
 
                 round_counter+=1
@@ -84,28 +88,25 @@ def main():
             # upon termination, calculate the terminal reward:
             # currently just checking if the agents satisfied consistency and validity
             # recieves a tuple of the form honest reward, byzantine reward
-            reward = giveReward(honest_list)
+            reward, satisfied_constraints_iter = giveReward(honest_list, single_run_trajectory_log)
 
+            ep_honest_reward += reward[0]
             #print('reward for iter:', reward)
 
             # storing in loggers
-            ep_rewards.append(reward)
+            satisfied_constraints.append(satisfied_constraints_iter)
             single_run_trajectory_log['reward'] = reward
             curr_ep_trajectory_logs.append(single_run_trajectory_log)
 
         total_trajectory_logs.append(curr_ep_trajectory_logs )
 
         #compute the loss using the RL algorithm
-        honest_rewards = [ 1 if s[0]==1 else 0 for s in ep_rewards  ]
+        honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
 
-        #honest_wins_total += honest_rewards
-        honest_wins_total.append(sum(honest_rewards)/iters_per_epoch)
-        print( 'honest wins this epoch', sum(honest_rewards), '=============')
-        print( 'honest wins this epoch %', sum(honest_rewards)/iters_per_epoch, '=============')
-        print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
-        print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
-
-        #byz_rewards = sum([ s[1] for s in ep_rewards ])
+        #honest_wins_total += honest_victory
+        honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
+        
+        #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
         
         losses = rl_algo(curr_ep_trajectory_logs)
         honest_loss = losses[0]
@@ -127,8 +128,13 @@ def main():
             print('Current Temperature is:' , curr_temperature, '=======')
             print('last trajectory from this epoch:')
             print(curr_ep_trajectory_logs[-1])
-            print('very first!')
-            print(curr_ep_trajectory_logs[0])
+            print('Maxed out the max round length %:', hit_max_round_len/iters_per_epoch)
+            #print( 'Honest wins this epoch', sum(honest_victory), '=============')
+            print('Epoch Sum of Honest Rewards', ep_honest_reward)
+            print( 'Honest wins this epoch %', sum(honest_victory)/iters_per_epoch, '=============')
+            #print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
+            #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
+
             print('=============================')
             print('=============================')
             #print useful information. 

@@ -122,11 +122,31 @@ def initStatesandAgents():
 
     return agent_list, honest_list, byzantine_list
 
+def honestPartiesCommit(honest_list):
+    for h in honest_list:
+        if type(h.committed_value) is bool:
+            return False
+    return True
 
-def giveReward(honest_parties):
+def giveReward(honest_parties, trajectory):
     # checks to see if the honest parties have obtained both
     # consistency and validity 
     # returns honest then byzantine reward. 
+
+    satisfied_constraints = False
+    #penalty for the number of rounds
+    num_rounds = len(trajectory[list(trajectory.keys())[0]]) # already iterating through the 
+    round_penalty_total = num_rounds*round_penalty
+
+    # if they started by committing, then punish: 
+    # a more handholding version would be to encourage them to send the first round. 
+    commit_penalty=np.array([0,0]) # default if they did nothing wrong. 
+    for key, trajectory_rounds in trajectory.items(): # going through the keys and their list of state, action, action prob pairs
+        if 'Byz-False' in key: #only getting honest
+            if 'commit' in trajectory_rounds[0][2] or 'no_send' in trajectory_rounds[0][2]: # getting the action from the first round
+                commit_penalty=commit_first_round_penalty
+                break
+
     com_values = []
     starting_values = []
     for h in honest_parties:
@@ -135,19 +155,15 @@ def giveReward(honest_parties):
 
     #checking if all the same value
     if len(set(com_values)) !=1:
-        return (-1, 1)
+        return consistency_violation + commit_penalty + round_penalty_total, satisfied_constraints
 
     # checking validity
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
         if starting_values != com_values:   
-            return (-1.5, 1)
+            return validity_violation + commit_penalty + round_penalty_total, satisfied_constraints
 
-    return (1, -1)
+    satisfied_constraints=True
+    return correct_commit + commit_penalty + round_penalty_total, satisfied_constraints
 
-def honestPartiesCommit(honest_list):
-    for h in honest_list:
-        if type(h.committed_value) is bool:
-            return False
-    return True

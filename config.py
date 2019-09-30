@@ -99,9 +99,9 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 500
-iters_per_epoch = 500
-max_round_len=15 # max number of rounds before termination of the current simulation
+epochs = 250
+iters_per_epoch = 100
+max_round_len=75 # max number of rounds before termination of the current simulation
 print_every = 1
 
 # NN Settings
@@ -150,6 +150,12 @@ lam=0.97
 target_kl=0.01
 logger_kwargs=dict()
 save_freq=10
+
+commit_first_round_penalty = np.array([-10,0])
+consistency_violation = np.array([-1, 1])
+validity_violation = np.array([-1.5, 1])
+correct_commit = np.array([1, -1])
+round_penalty = np.array([-0.8,0]) # currently only applies to the honest parties
 
 # need to make the RL neural networks: 
 '''
