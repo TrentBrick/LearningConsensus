@@ -83,10 +83,13 @@ scenario = 'Basic'
 #if scenario=='Basic':
 commit_vals = (0,1)
 # assumes honest and byz see current state and only current state for now. 
-state_oh_size = len(commit_vals)*(len(commit_vals)+1) # commit values one hot len * commit value+no message
-null_message_val = 2
-num_agents = 3
+# own state as a len 2 vector * num agents 
+
+num_agents = 2
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
+
+state_oh_size = len(commit_vals)*num_agents # commit values one hot len * commit value+no message
+null_message_val = 2
 
 oneHotMapper = dict()
 for com_val in commit_vals:
