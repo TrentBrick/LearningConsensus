@@ -16,6 +16,7 @@ def main():
     temperature_tracker = []
 
     honest_wins_total = []
+    total_honest_rewards = []
     
     #first_ep_first_batch_only=None
 
@@ -37,6 +38,7 @@ def main():
         ep_honest_reward = 0
 
         hit_max_round_len = 0
+        avg_round_len = 0
 
         for iter_in_ep in range(iters_per_epoch):
             #run the environment. 
@@ -83,6 +85,8 @@ def main():
 
                 round_counter+=1
 
+            avg_round_len += round_counter
+
             #print('single trajectory over:', single_run_trajectory_log)
 
             # upon termination, calculate the terminal reward:
@@ -105,6 +109,7 @@ def main():
 
         #honest_wins_total += honest_victory
         honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
+        total_honest_rewards.append(ep_honest_reward/iters_per_epoch)
         
         #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
         
@@ -128,9 +133,10 @@ def main():
             print('Current Temperature is:' , curr_temperature, '=======')
             print('last trajectory from this epoch:')
             print(curr_ep_trajectory_logs[-1])
-            print('Maxed out the max round length %:', hit_max_round_len/iters_per_epoch)
+            print('Hit the max round length %:', hit_max_round_len/iters_per_epoch)
             #print( 'Honest wins this epoch', sum(honest_victory), '=============')
-            print('Epoch Sum of Honest Rewards', ep_honest_reward)
+            print('Average round length', avg_round_len/iters_per_epoch)
+            print('Epoch Sum of Honest Rewards', ep_honest_reward/iters_per_epoch)
             print( 'Honest wins this epoch %', sum(honest_victory)/iters_per_epoch, '=============')
             #print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
             #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
@@ -150,6 +156,14 @@ def main():
     plt.title(str(iters_per_epoch)+' iters per epoch')
     plt.legend()
     plt.gcf().savefig(directory+'honest_wins-'+experiment_name+'.png', dpi=200)
+
+    plt.figure()
+    plt.plot(range(len(total_honest_rewards)), total_honest_rewards, label='honest_rewards')
+    plt.xlabel('epochs')
+    plt.ylabel('honest rewards in the epoch')
+    plt.title(str(iters_per_epoch)+' iters per epoch')
+    plt.legend()
+    plt.gcf().savefig(directory+'honest_rewards-'+experiment_name+'.png', dpi=200)
     
     pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 

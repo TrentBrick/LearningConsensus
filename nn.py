@@ -10,7 +10,7 @@ def randomActions(action_space):
 # taken from FiredUp
 class MLP(nn.Module):
     def __init__(self, layers, activation=torch.tanh, output_activation=None,
-                 output_squeeze=False):
+                 output_squeeze=False, use_bias=True):
         super(MLP, self).__init__()
         self.layers = nn.ModuleList()
         self.activation = activation
@@ -18,8 +18,9 @@ class MLP(nn.Module):
         self.output_squeeze = output_squeeze
         
         for i, layer in enumerate(layers[1:]):
-            self.layers.append(nn.Linear(layers[i], layer))
-            nn.init.zeros_(self.layers[i].bias)
+            self.layers.append(nn.Linear(layers[i], layer, bias=use_bias))
+            if use_bias:
+                nn.init.zeros_(self.layers[i].bias)
 
     def forward(self, input):
         x = input
@@ -34,19 +35,17 @@ class MLP(nn.Module):
 
 class BasicPolicy(nn.Module):
     def __init__(self, action_dim, in_features, hidden_sizes,
-     activation, output_activation):
+     activation, output_activation, use_bias):
         super(BasicPolicy, self).__init__()
 
         self.logits = MLP(layers=[in_features]+list(hidden_sizes)+[action_dim],
-                          activation=activation, output_activation=None)
+                          activation=activation, output_activation=None, use_bias=use_bias)
 
     def forward(self, x):
         logits = self.logits(x)
 
         return logits 
         
-
-
 '''def commitToValue(value):
     return 'commit_'+str(value)'''
 

@@ -85,7 +85,7 @@ commit_vals = (0,1)
 # assumes honest and byz see current state and only current state for now. 
 # own state as a len 2 vector * num agents 
 
-num_agents = 2
+num_agents = 3
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
 state_oh_size = len(commit_vals)*num_agents # commit values one hot len * commit value+no message
@@ -104,15 +104,16 @@ print('this script is running first, numb of agents is: ', num_agents)
 # Training Settings
 epochs = 250
 iters_per_epoch = 100
-max_round_len=75 # max number of rounds before termination of the current simulation
+max_round_len=10 # max number of rounds before termination of the current simulation
 print_every = 1
 
 # NN Settings
-learning_rate=0.001
+learning_rate=0.0005
 batch_size = 32
 hidden_sizes = (32,32,)
 activation= torch.tanh
 output_activation = None # I do softmax in the env section. 
+use_bias = False
 
 if load_policy:
     print("LOADING IN A policy, load_policy=True")
@@ -124,8 +125,8 @@ else:
         honest_action_space_size = len(getActionSpace(False, byzantine_inds=None))
         byz_action_space_size = len(getActionSpace(True, byzantine_inds=[0]))
 
-        honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation).to(device)
-        byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation).to(device)
+        honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
+        byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
 
     honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=learning_rate)
     byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=learning_rate)
@@ -143,6 +144,7 @@ starting_temp = 4
 temp_anneal = 0.995
 temp_fix_point = 1
 rl_algo = vpg
+# lots of these refer to PPO which will be implemented later. 
 steps_per_epoch=4000
 gamma=0.99
 clip_ratio=0.2
@@ -154,11 +156,13 @@ target_kl=0.01
 logger_kwargs=dict()
 save_freq=10
 
-commit_first_round_penalty = np.array([-10,0])
+# penalties/rewards. (honest ,byzantine) 
+# ensure that the commit first hurts more than even getting it wrong. 
+commit_first_round_penalty = np.array([-3,0])
 consistency_violation = np.array([-1, 1])
 validity_violation = np.array([-1.5, 1])
 correct_commit = np.array([1, -1])
-round_penalty = np.array([-0.8,0]) # currently only applies to the honest parties
+round_penalty = np.array([-0.3,0.1]) # currently only applies to the honest parties
 
 # need to make the RL neural networks: 
 '''
