@@ -102,18 +102,18 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 2000
+epochs = 5000
 iters_per_epoch = 50
 max_round_len=10 # max number of rounds before termination of the current simulation
 print_every = 1
 
 # NN Settings
-learning_rate=0.0001
+learning_rate=0.00001
 batch_size = 32
 hidden_sizes = (32,32,)
 activation= torch.tanh
 output_activation = None # I do softmax in the env section. 
-use_bias = False
+use_bias = True
 
 if load_policy:
     print("LOADING IN A policy, load_policy=True")
@@ -140,8 +140,8 @@ mem_pin = False
 # clip=15 if want this see Protein AE code to add it. 
 
 # RL Settings
-starting_temp = 200 # this is so high to try and encourage lots of exploration
-temp_anneal = 0.998
+starting_temp = 300 # this is so high to try and encourage lots of exploration
+temp_anneal = 0.999
 temp_fix_point = 1.0
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
 rl_algo = vpg
