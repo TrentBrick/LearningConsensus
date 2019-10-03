@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from config import *
 from nn import *
+import matplotlib.pyplot as plt
 
 def toOneHot(state):
     oh = []
@@ -24,7 +25,7 @@ class Agent:
         else: 
             #self.brain = randomActions
             self.brain = honest_policy
-        self.actionSpace = getActionSpace(isByzantine, byzantine_inds) 
+        self.actionSpace = getActionSpace(isByzantine, byzantine_inds, can_send_either_value=honest_can_send_either_value) 
         init_val = np.random.choice(commit_vals, 1)[0]
         self.initVal = init_val
         initState = [init_val]
@@ -74,23 +75,30 @@ def updateStates(agent_list):
     for reciever in agent_list:
         new_state = [reciever.initVal] # keep track of the agent's initial value, 
         #want to show to the NN each time
-        for actor in agent_list:
+        for actor_ind, actor in enumerate(agent_list):
             if actor == reciever: # check if agent committed. 
                 continue
             # dont need to check if committed a value as already will prevent 
             # from taking any actions other than no send. 
-            new_state.append( actionEffect(actor.action, reciever.agentID) )
+            new_state.append( actionEffect(actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
 
         reciever.state = new_state
 
-def actionEffect(action, receiver_id):
+def actionEffect(action, init_val, actor_prev_action_result, receiver_id):
     # return the effects of a particular action
 
-    if action == 'no_send' or action.split('_')[0]=='commit':
+    if action == 'no_send':
         return null_message_val
 
+    elif 'commit' in action: # keep returning the last state that the agent sent
+        return actor_prev_action_result
+
     elif 'to_all' in action:
-        return int(action.split('_')[-1])
+        if honest_can_send_either_value==False:
+            if 'init' in action: # will only be true if honests not allowed to send a different value
+                return init_val
+        else: 
+            return int(action.split('_')[-1])
     
     elif 'agent-'+str(receiver_id) in action:
         # getting the first value of this. 
@@ -101,6 +109,14 @@ def actionEffect(action, receiver_id):
     # need to add values to these. # and make it easy to parse who it is going to . 
     # have it say agent-1, agent-2 etc. 
 
+def savePlot(to_plot, label):
+    plt.figure()
+    plt.plot(range(len(to_plot)), to_plot, label=label)
+    plt.xlabel('epochs')
+    plt.ylabel(label)
+    plt.title(str(iters_per_epoch)+' iters per epoch')
+    plt.legend()
+    plt.gcf().savefig(directory+label+experiment_name+'.png', dpi=200)
 
 def initStatesandAgents():
     
@@ -144,7 +160,11 @@ def giveReward(honest_parties, trajectory):
     #default if they did nothing wrong. 
     for key, trajectory_rounds in trajectory.items(): # going through the keys and their list of state, action, action prob pairs
         if 'Byz-False' in key: #only getting honest
-            if 'send_to_all-value_'+str(trajectory_rounds[0][1][0]) != trajectory_rounds[0][2]: # getting the action from the first round
+            if honest_can_send_either_value==False: # make the string be init rather than a value. 
+                string_to_check = 'init'
+            else: 
+                string_to_check = str(trajectory_rounds[0][1][0])
+            if 'send_to_all-value_'+string_to_check != trajectory_rounds[0][2]: # getting the action from the first round
                 return dishonesty_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
                 #no_send_true_value_first_penalty=dont_send_value_first_round_penalty
                 #break

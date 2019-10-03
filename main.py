@@ -32,7 +32,7 @@ def main():
         else: 
             if curr_temperature>temp_fix_point: # only decrease temp if it is above threshold
                 curr_temperature = curr_temperature*temp_anneal
-                
+
         temperature_tracker.append(curr_temperature)
         
         honest_policy.zero_grad()
@@ -154,23 +154,11 @@ def main():
         curr_ep += 1
 
     # plot the change in temperature over time. 
-    # plot average honest win rate over time. 
-    plt.plot(range(len(honest_wins_total)), honest_wins_total, label='honest_win_%')
-    plt.plot(range(len(temperature_tracker)), temperature_tracker, label='temperature')
-    plt.xlabel('epochs')
-    plt.ylabel('\% honest wins in the epoch')
-    plt.title(str(iters_per_epoch)+' iters per epoch')
-    plt.legend()
-    plt.gcf().savefig(directory+'honest_wins-'+experiment_name+'.png', dpi=200)
+    # plot average honest dddwin rate over time. 
+    save_labels = ['honest_wins', 'temperature', 'total_honest_rewards']
+    for to_plot, label in zip([honest_wins_total, temperature_tracker, total_honest_rewards],save_labels):
+        savePlot(to_plot, label)
 
-    plt.figure()
-    plt.plot(range(len(total_honest_rewards)), total_honest_rewards, label='honest_rewards')
-    plt.xlabel('epochs')
-    plt.ylabel('honest rewards in the epoch')
-    plt.title(str(iters_per_epoch)+' iters per epoch')
-    plt.legend()
-    plt.gcf().savefig(directory+'honest_rewards-'+experiment_name+'.png', dpi=200)
-    
     #pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 
 # if the policy is better then save it. is overfitting a problem in RL? 

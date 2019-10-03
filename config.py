@@ -8,7 +8,7 @@ from rl_algo import *
 
 import itertools
 from collections import OrderedDict
-def getActionSpace(isByzantine, byzantine_inds=None):
+def getActionSpace(isByzantine, byzantine_inds=None, can_send_either_value=True):
     '''move this to a new script that config and environment and agent utils can reference. '''
 
     # making the action space. 
@@ -58,9 +58,15 @@ def getActionSpace(isByzantine, byzantine_inds=None):
             action_space = list(OrderedDict.fromkeys(action_space))
 
         else:
-            for commit_val in commit_vals:
-                action_space.append('send_to_all-value_'+str(commit_val)) 
-                action_space.append('commit_'+str(commit_val)) 
+            if can_send_either_value: 
+                for commit_val in commit_vals:
+                    action_space.append('send_to_all-value_'+str(commit_val)) 
+                    action_space.append('commit_'+str(commit_val)) 
+            else: 
+                action_space.append('send_to_all-value_init') 
+                for commit_val in commit_vals:
+                    action_space.append('commit_'+str(commit_val)) 
+            
 
     return action_space
 
@@ -103,47 +109,16 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 1000
-iters_per_epoch = 50
-max_round_len=10 # max number of rounds before termination of the current simulation
+epochs = 5000
+iters_per_epoch = 1000 # I think this number is really important to tune. 
+max_round_len=5 # max number of rounds before termination of the current simulation
 print_every = 1
 
-# NN Settings
-learning_rate=0.0001
-batch_size = 32
-hidden_sizes = (16,8,)
-activation= torch.tanh
-output_activation = None # I do softmax in the env section. 
-use_bias = True
-
-if load_policy:
-    print("LOADING IN A policy, load_policy=True")
-    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
-
-else: 
-    if scenario=='Basic':
-
-        honest_action_space_size = len(getActionSpace(False, byzantine_inds=None))
-        byz_action_space_size = len(getActionSpace(True, byzantine_inds=[0]))
-
-        honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
-        byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
-
-    honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=learning_rate)
-    byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=learning_rate)
-    # cant be 0 else later on there is division by zero!
-starting_ep = 1 
-
-honest_policy.train()
-byz_policy.train()
-
-mem_pin = False
-# clip=15 if want this see Protein AE code to add it. 
-
 # RL Settings
-starting_temp = 10 # this is so high to try and encourage lots of exploration
-temp_anneal = 0.99
+starting_temp = 5 # this is so high to try and encourage lots of exploration
+temp_anneal = 0.995 #5 is a bit better
 temp_fix_point = 1.0
+honest_can_send_either_value = False # can the honest agents send only their init value or other values also? 
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
 rl_algo = vpg
 # lots of these refer to PPO which will be implemented later. 
@@ -165,7 +140,40 @@ consistency_violation = np.array([-1, 1])
 validity_violation = np.array([-0.75, 1])
 majority_violation = np.array([-0.5, 1])
 correct_commit = np.array([1, -1])
-round_penalty = np.array([-0.01,0.1]) # currently only applies to the honest parties
+round_penalty = np.array([-0.1,0.1]) # currently only applies to the honest parties
+
+
+# NN Settings
+learning_rate=0.0001
+batch_size = 32
+hidden_sizes = (32,32,)
+activation= torch.tanh
+output_activation = None # I do softmax in the env section. 
+use_bias = True
+
+if load_policy:
+    print("LOADING IN A policy, load_policy=True")
+    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
+
+else: 
+    if scenario=='Basic':
+        honest_action_space_size = len(getActionSpace(False, byzantine_inds=None, can_send_either_value=honest_can_send_either_value))
+        byz_action_space_size = len(getActionSpace(True, byzantine_inds=[0], can_send_either_value=honest_can_send_either_value))
+
+        honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
+        byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
+
+    honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=learning_rate)
+    byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=learning_rate)
+    # cant be 0 else later on there is division by zero!
+starting_ep = 1 
+
+honest_policy.train()
+byz_policy.train()
+
+mem_pin = False
+# clip=15 if want this see Protein AE code to add it. 
+
 
 # need to make the RL neural networks: 
 '''
