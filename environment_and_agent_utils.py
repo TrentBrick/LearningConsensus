@@ -140,12 +140,14 @@ def giveReward(honest_parties, trajectory):
 
     # if they started by committing, then punish: 
     # a more handholding version would be to encourage them to send the first round. 
-    commit_penalty=np.array([0,0]) # default if they did nothing wrong. 
+    no_send_true_value_first_penalty=np.array([0,0]) # may be able to remove this later. 
+    #default if they did nothing wrong. 
     for key, trajectory_rounds in trajectory.items(): # going through the keys and their list of state, action, action prob pairs
         if 'Byz-False' in key: #only getting honest
-            if 'commit' in trajectory_rounds[0][2] or 'no_send' in trajectory_rounds[0][2]: # getting the action from the first round
-                commit_penalty=commit_first_round_penalty
-                break
+            if 'send_to_all-value_'+str(trajectory_rounds[0][1][0]) != trajectory_rounds[0][2]: # getting the action from the first round
+                return dishonesty_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
+                #no_send_true_value_first_penalty=dont_send_value_first_round_penalty
+                #break
 
     com_values = []
     starting_values = []
@@ -155,20 +157,20 @@ def giveReward(honest_parties, trajectory):
 
     #checking if all the same value
     if len(set(com_values)) !=1:
-        return consistency_violation + commit_penalty + round_penalty_total, satisfied_constraints
+        return consistency_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
 
     # want them to commit to the majority init value: 
     majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
     if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
-        return majority_violation + commit_penalty + round_penalty_total, satisfied_constraints
+        return majority_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
 
     # checking validity
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
         if starting_values != com_values:   
-            return validity_violation + commit_penalty + round_penalty_total, satisfied_constraints
+            return validity_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
 
     satisfied_constraints=True
-    return correct_commit + commit_penalty + round_penalty_total, satisfied_constraints
+    return correct_commit + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
 
