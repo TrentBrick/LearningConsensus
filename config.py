@@ -19,7 +19,7 @@ def getActionSpace(isByzantine, byzantine_inds=None):
     parties = set(range(num_agents))
     if scenario == 'Basic':
 
-        action_space = ['no_send']
+        action_space = []#['no_send']
 
         if isByzantine:
             # no point in sending messages to other Byzantines as the central agent knows what the states are
@@ -102,13 +102,13 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 250
-iters_per_epoch = 100
+epochs = 2000
+iters_per_epoch = 50
 max_round_len=10 # max number of rounds before termination of the current simulation
 print_every = 1
 
 # NN Settings
-learning_rate=0.0005
+learning_rate=0.0001
 batch_size = 32
 hidden_sizes = (32,32,)
 activation= torch.tanh
@@ -140,13 +140,14 @@ mem_pin = False
 # clip=15 if want this see Protein AE code to add it. 
 
 # RL Settings
-starting_temp = 4
-temp_anneal = 0.995
-temp_fix_point = 1
+starting_temp = 200 # this is so high to try and encourage lots of exploration
+temp_anneal = 0.998
+temp_fix_point = 1.0
+use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
 rl_algo = vpg
 # lots of these refer to PPO which will be implemented later. 
 steps_per_epoch=4000
-gamma=0.99
+gamma=0.999
 clip_ratio=0.2
 vf_lr=1e-3
 train_policy_iters=80
@@ -158,11 +159,12 @@ save_freq=10
 
 # penalties/rewards. (honest ,byzantine) 
 # ensure that the commit first hurts more than even getting it wrong. 
-commit_first_round_penalty = np.array([-3,0])
+commit_first_round_penalty = np.array([-0,0])
 consistency_violation = np.array([-1, 1])
-validity_violation = np.array([-1.5, 1])
+validity_violation = np.array([-0.75, 1])
+majority_violation = np.array([-0.5, 1])
 correct_commit = np.array([1, -1])
-round_penalty = np.array([-0.3,0.1]) # currently only applies to the honest parties
+round_penalty = np.array([-0.01,0.1]) # currently only applies to the honest parties
 
 # need to make the RL neural networks: 
 '''
@@ -183,4 +185,4 @@ vf_optimizer = torch.optim.Adam(vf_model.parameters(), lr=vf_lr)
 date_time = str(datetime.datetime.now()).replace(' ', '_')
 # used to save the policy and its outputs. 
 experiment_name = experiment_base_name+"rand_seed-%s_scenario-%s_epochs-%s_iters_per_ep-%s_rl_algo-%s_time-%s" % (random_seed, scenario, 
-epochs, iters_per_epoch, rl_algo, date_time )
+epochs, iters_per_epoch, str(rl_algo), date_time )

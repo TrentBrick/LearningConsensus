@@ -25,10 +25,16 @@ def main():
     while curr_ep < (epochs+starting_ep):  
         print('Epoch', curr_ep)
 
-        if curr_temperature>temp_fix_point:
+        if use_heat_jumps:
             curr_temperature = curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
+            if curr_temperature<temp_fix_point: # this will bump up the temperature again after having annealed it. 
+                curr_temperature = starting_temp
+        else: 
+            if curr_temperature>temp_fix_point: # only decrease temp if it is above threshold
+                curr_temperature = curr_temperature*temp_anneal
+                
         temperature_tracker.append(curr_temperature)
-
+        
         honest_policy.zero_grad()
         byz_policy.zero_grad()
 
@@ -165,7 +171,7 @@ def main():
     plt.legend()
     plt.gcf().savefig(directory+'honest_rewards-'+experiment_name+'.png', dpi=200)
     
-    pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
+    #pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 
 # if the policy is better then save it. is overfitting a problem in RL? 
 

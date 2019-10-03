@@ -157,6 +157,11 @@ def giveReward(honest_parties, trajectory):
     if len(set(com_values)) !=1:
         return consistency_violation + commit_penalty + round_penalty_total, satisfied_constraints
 
+    # want them to commit to the majority init value: 
+    majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
+    if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
+        return majority_violation + commit_penalty + round_penalty_total, satisfied_constraints
+
     # checking validity
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
