@@ -108,7 +108,7 @@ def main():
             single_run_trajectory_log['reward'] = reward
             curr_ep_trajectory_logs.append(single_run_trajectory_log)
 
-        total_trajectory_logs.append(curr_ep_trajectory_logs )
+        total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
         #compute the loss using the RL algorithm
         honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
@@ -159,7 +159,7 @@ def main():
     for to_plot, label in zip([honest_wins_total, temperature_tracker, total_honest_rewards],save_labels):
         savePlot(to_plot, label)
 
-    #pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
+    pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 
 # if the policy is better then save it. is overfitting a problem in RL? 
 

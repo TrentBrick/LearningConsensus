@@ -109,14 +109,14 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 5000
-iters_per_epoch = 1000 # I think this number is really important to tune. 
+epochs = 300
+iters_per_epoch = 50 # I think this number is really important to tune. 
 max_round_len=5 # max number of rounds before termination of the current simulation
 print_every = 1
 
 # RL Settings
 starting_temp = 5 # this is so high to try and encourage lots of exploration
-temp_anneal = 0.995 #5 is a bit better
+temp_anneal = 0.99 #5 is a bit better
 temp_fix_point = 1.0
 honest_can_send_either_value = False # can the honest agents send only their init value or other values also? 
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
@@ -144,7 +144,7 @@ round_penalty = np.array([-0.1,0.1]) # currently only applies to the honest part
 
 
 # NN Settings
-learning_rate=0.0001
+learning_rate=0.001
 batch_size = 32
 hidden_sizes = (32,32,)
 activation= torch.tanh
