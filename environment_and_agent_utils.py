@@ -10,9 +10,11 @@ def toOneHot(state):
     for s in state:
         #print('state for one hot',s)
         oh.append(oneHotMapper[s])
-    oh = np.asarray(oh).T.flatten() # now each column is one of the states.
+    oh = np.asarray(oh).flatten().T # now each column is one of the states.
     #convert ot pytorch tensor: 
+    #print('ohhh', oh)
     oh = torch.from_numpy(oh).float().to(device)
+    #print('oehehehe', oh)
     return oh
 
 class Agent:

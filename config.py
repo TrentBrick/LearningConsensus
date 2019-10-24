@@ -80,8 +80,6 @@ random_seed = 27
 load_policy = False
 load_name = 'Lolz'
 
-
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
 # Environment Settings
@@ -105,7 +103,7 @@ for com_val in commit_vals:
     oneHotMapper[com_val]=z
 
 oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
-
+print('onehotmapper is', oneHotMapper)
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
@@ -145,7 +143,7 @@ round_penalty = np.array([0,0]) # currently only applies to the honest parties
 # NN Settings
 learning_rate=0.001
 batch_size = 32
-hidden_sizes = (32,16,8)
+hidden_sizes = (8,8)
 activation= torch.tanh
 output_activation = None # I do softmax in the env section. 
 use_bias = True
