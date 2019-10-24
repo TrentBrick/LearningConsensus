@@ -110,10 +110,6 @@ def main():
 
         total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
-        
-        
-        
-        
         losses = rl_algo(curr_ep_trajectory_logs)
         honest_loss = losses[0]
         byz_loss = losses[1]
@@ -131,7 +127,7 @@ def main():
         #honest_wins_total += honest_victory
         #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
         honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
-        total_honest_rewards.append(losses[0]/iters_per_epoch)
+        total_honest_rewards.append(losses[0])
         
 
         # get all of the relevant metrics. eg. loss.item()

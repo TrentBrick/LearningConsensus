@@ -15,7 +15,7 @@ def vpg(curr_ep_trajectory_logs):
     # curr_ep_trajectory_logs has a list of dictionaries, each dict is
     # separated out by the agent or reward and tuples of: (round_counter, state, action, action_logprob) 
 
-    num_trajectories = len(curr_ep_trajectory_logs)
+    
     losses = [] # will store honest and then byz losses. 
 
     for isByz in [False, True]: # iterating through the honest and byzantine parties
@@ -23,6 +23,7 @@ def vpg(curr_ep_trajectory_logs):
         reward_ind = int(isByz) # if is byzantine, this is a 1, which is the index in the rewards for byzantine. 
         
         logp_rewards_sum = 0
+        num_trajectories = 0 # want to count this separately for honest and byzantine
         
         for trajectory_iter in curr_ep_trajectory_logs: # going through each of the trajectories 
             
@@ -65,6 +66,8 @@ def vpg(curr_ep_trajectory_logs):
                             rewards_to_go += additional_round_penalty
                         
                         logp_rewards_sum += log_prob * rewards_to_go
+
+            num_trajectories +=1
 
         logp_rewards_sum /= num_trajectories
         logp_rewards_sum *= -1 # so that it is gradient ascent!
