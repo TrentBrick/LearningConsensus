@@ -70,8 +70,6 @@ def getActionSpace(isByzantine, byzantine_inds=None, can_send_either_value=True)
 
     return action_space
 
-
-
 # Experiment Settings
 experiment_base_name = 'Basic_Test_Run_OnlyHonest'
 directory = 'runs/'
@@ -110,8 +108,8 @@ print('onehotmapper is', oneHotMapper)
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 400
-iters_per_epoch = 100 # I think this number is really important to tune. 
+epochs = 700
+iters_per_epoch = 200 # I think this number is really important to tune. 
 max_round_len=1000 # max number of rounds before termination of the current simulation
 print_every = 5
 
@@ -145,7 +143,7 @@ correct_commit = np.array([1, -1])
 round_penalty = np.array([0,0]) # currently only applies to the honest parties
 
 # NN Settings
-learning_rate=0.001
+learning_rate=0.003
 batch_size = 32
 hidden_sizes = (16,8)
 activation= torch.tanh

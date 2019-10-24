@@ -110,14 +110,9 @@ def main():
 
         total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
-        #compute the loss using the RL algorithm
-        honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
-
-        #honest_wins_total += honest_victory
-        honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
-        total_honest_rewards.append(ep_honest_reward/iters_per_epoch)
         
-        #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
+        
+        
         
         losses = rl_algo(curr_ep_trajectory_logs)
         honest_loss = losses[0]
@@ -130,6 +125,14 @@ def main():
         honest_optimizer.step()
         if num_byzantine!=0:
             byz_optimizer.step()
+
+        #compute the loss using the RL algorithm
+        honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
+        #honest_wins_total += honest_victory
+        #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
+        honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
+        total_honest_rewards.append(losses[0]/iters_per_epoch)
+        
 
         # get all of the relevant metrics. eg. loss.item()
 
@@ -158,7 +161,7 @@ def main():
 
     # plot the change in temperature over time. 
     # plot average honest dddwin rate over time. 
-    save_labels = ['honest_wins', 'temperature', 'total_honest_rewards']
+    save_labels = ['honest_wins', 'temperature', 'average_loss']
     for to_plot, label in zip([honest_wins_total, temperature_tracker, total_honest_rewards],save_labels):
         savePlot(to_plot, label)
 

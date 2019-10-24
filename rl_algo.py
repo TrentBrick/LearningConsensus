@@ -1,7 +1,7 @@
 #first going to implement vpg (https://spinningup.openai.com/en/latest/algorithms/vpg.html#documentation)
 send_all_first_round_reward = 0.3
 additional_round_penalty = -0.03
-commit_to_majority = 0.3
+commit_to_majority = 0.5
 
 def vpg(curr_ep_trajectory_logs):
     # for byzantine and honest separately (need to sum over the different honest agents also):
