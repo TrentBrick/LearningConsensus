@@ -138,7 +138,7 @@ def initStatesandAgents():
     byzantine_list = []
     honest_list = []
 
-    give_inits = list(np.random.choice([0,1], 3))
+    #give_inits = list(np.random.choice([0,1], 3))
     #print(give_inits)
     #print(type(give_inits))
     
@@ -146,7 +146,7 @@ def initStatesandAgents():
         if i in byzantine_inds:
             byzantine_list.append(Agent(True, i, byzantine_inds))
         else: 
-            honest_list.append(Agent(False, i, give_inits=give_inits))
+            honest_list.append(Agent(False, i, )) #give_inits=give_inits
 
     agent_list = byzantine_list + honest_list
 

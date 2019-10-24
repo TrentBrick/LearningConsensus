@@ -93,32 +93,36 @@ commit_vals = (0,1)
 num_agents = 3
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
-state_oh_size = len(commit_vals)*num_agents # commit values one hot len * commit value+no message
+# size of the vector input to the neural network. this is the states that all other agents have. 
+state_oh_size = (len(commit_vals)+1)*num_agents
 null_message_val = 2
 
 oneHotMapper = dict()
 for com_val in commit_vals:
-    z = np.zeros(len(commit_vals))
+    z = np.zeros(len(commit_vals)+1)
     z[com_val] = 1
     oneHotMapper[com_val]=z
 
-oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
+null = np.zeros(len(commit_vals)+1)
+null[-1] = 1
+oneHotMapper[null_message_val]=null
 print('onehotmapper is', oneHotMapper)
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 500
-iters_per_epoch = 500 # I think this number is really important to tune. 
-max_round_len=3 # max number of rounds before termination of the current simulation
-print_every = 3
+epochs = 400
+iters_per_epoch = 100 # I think this number is really important to tune. 
+max_round_len=1000 # max number of rounds before termination of the current simulation
+print_every = 5
 
 # RL Settings
-starting_temp = 5 # this is so high to try and encourage lots of exploration
-temp_anneal = 0.99 #5 is a bit better
+starting_temp = 6 # this is so high to try and encourage lots of exploration
+temp_anneal = 0.985 #5 is a bit better 0.99 before. 
 temp_fix_point = 1.0
 honest_can_send_either_value = False # can the honest agents send only their init value or other values also? 
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
 rl_algo = vpg
+
 # lots of these refer to PPO which will be implemented later. 
 steps_per_epoch=4000
 gamma=0.999
@@ -135,15 +139,15 @@ save_freq=10
 # ensure that the commit first hurts more than even getting it wrong. 
 dishonesty_violation = np.array([0,0]) # doesnt send its value to everyone else on the first round. 
 consistency_violation = np.array([-1, 1])
-validity_violation = np.array([-0.75, 1])
-majority_violation = np.array([-0.5, 1])
+validity_violation = np.array([-2, 1]) # used to be -0.75
+majority_violation = np.array([-1, 1]) # -0.5
 correct_commit = np.array([1, -1])
 round_penalty = np.array([0,0]) # currently only applies to the honest parties
 
 # NN Settings
 learning_rate=0.001
 batch_size = 32
-hidden_sizes = (8,8)
+hidden_sizes = (16,8)
 activation= torch.tanh
 output_activation = None # I do softmax in the env section. 
 use_bias = True

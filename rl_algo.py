@@ -1,7 +1,7 @@
 #first going to implement vpg (https://spinningup.openai.com/en/latest/algorithms/vpg.html#documentation)
-send_all_first_round_reward = 0 # 0.8
-additional_round_penalty = -0.3
-commit_to_majority = 0.7
+send_all_first_round_reward = 0.3
+additional_round_penalty = -0.03
+commit_to_majority = 0.3
 
 def vpg(curr_ep_trajectory_logs):
     # for byzantine and honest separately (need to sum over the different honest agents also):
@@ -51,12 +51,11 @@ def vpg(curr_ep_trajectory_logs):
                             continue
 
                         # reward for not committing in the first round
-                        if not isByz and round_ind == 0 and 'send_to_all-' in roundd[2]:
+                        if not isByz and round_ind == 0 and 'send_to_all-' in agent_round_action:
                             rewards_to_go += send_all_first_round_reward
 
                         # if this agent committed to the majority value, reward them
                         majority_value = int((sum(agent_round_state) / len(agent_round_state))+0.5)
-                        
                         if not isByz and 'commit' in agent_round_action and  majority_value == int(agent_round_action.split('_')[1]) :
                             #print('committted to majority!!!!!!', majority_value, agent_round_state, agent_round_action)
                             rewards_to_go += commit_to_majority
