@@ -3,7 +3,7 @@
 import datetime
 import torch 
 from nn import *
-from rl_algo import *
+from rl_algo import vpg
 
 
 import itertools
@@ -109,10 +109,10 @@ oneHotMapper[null_message_val]=np.zeros(len(commit_vals))
 print('this script is running first, numb of agents is: ', num_agents)
 
 # Training Settings
-epochs = 300
-iters_per_epoch = 50 # I think this number is really important to tune. 
-max_round_len=5 # max number of rounds before termination of the current simulation
-print_every = 1
+epochs = 500
+iters_per_epoch = 500 # I think this number is really important to tune. 
+max_round_len=3 # max number of rounds before termination of the current simulation
+print_every = 3
 
 # RL Settings
 starting_temp = 5 # this is so high to try and encourage lots of exploration
@@ -135,18 +135,17 @@ save_freq=10
 
 # penalties/rewards. (honest ,byzantine) 
 # ensure that the commit first hurts more than even getting it wrong. 
-dishonesty_violation = np.array([-5,1]) # doesnt send its value to everyone else on the first round. 
+dishonesty_violation = np.array([0,0]) # doesnt send its value to everyone else on the first round. 
 consistency_violation = np.array([-1, 1])
 validity_violation = np.array([-0.75, 1])
 majority_violation = np.array([-0.5, 1])
 correct_commit = np.array([1, -1])
-round_penalty = np.array([-0.1,0.1]) # currently only applies to the honest parties
-
+round_penalty = np.array([0,0]) # currently only applies to the honest parties
 
 # NN Settings
 learning_rate=0.001
 batch_size = 32
-hidden_sizes = (32,32,)
+hidden_sizes = (32,16,8)
 activation= torch.tanh
 output_activation = None # I do softmax in the env section. 
 use_bias = True

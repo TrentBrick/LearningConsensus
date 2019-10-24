@@ -62,7 +62,7 @@ def main():
                 for agent in agent_list: 
 
                     if type(agent.committed_value) is int:      # dont change to True! Either it is False or a real value. 
-                        action, action_logprob = agent.action, 0
+                        action, action_logprob = agent.action, None
                     else:
                         if round_counter>max_round_len: # force the honest agents to commit to a value. 
                             action, action_logprob = agent.chooseAction(curr_temperature, forceCommit=True)
@@ -135,10 +135,11 @@ def main():
 
         if (curr_ep % print_every == 0):
             print('=============================')
-            print('Current Epoch is: ', curr_ep)
-            print('Current Temperature is:' , curr_temperature, '=======')
+            
             print('last trajectory from this epoch:')
-            print(curr_ep_trajectory_logs[-1])
+            for k, v in curr_ep_trajectory_logs[-1].items():
+                print(k, v)
+                print('---------')
             print('Hit the max round length %:', hit_max_round_len/iters_per_epoch)
             #print( 'Honest wins this epoch', sum(honest_victory), '=============')
             print('Average round length', avg_round_len/iters_per_epoch)
@@ -146,7 +147,9 @@ def main():
             print( 'Honest wins this epoch %', sum(honest_victory)/iters_per_epoch, '=============')
             #print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
             #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
-
+            print('Current Epoch is: ', curr_ep)
+            print('Current Temperature is:' , curr_temperature, '=======')
+            print('Losses from the Epoch', losses)
             print('=============================')
             print('=============================')
             #print useful information. 

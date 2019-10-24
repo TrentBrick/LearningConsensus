@@ -16,7 +16,7 @@ def toOneHot(state):
     return oh
 
 class Agent:
-    def __init__(self, isByzantine, agentID, byzantine_inds=None):
+    def __init__(self, isByzantine, agentID, byzantine_inds=None, give_inits = 0):
         self.isByzantine = isByzantine
         self.agentID = agentID
         if isByzantine:
@@ -26,17 +26,25 @@ class Agent:
             #self.brain = randomActions
             self.brain = honest_policy
         self.actionSpace = getActionSpace(isByzantine, byzantine_inds, can_send_either_value=honest_can_send_either_value) 
-        init_val = np.random.choice(commit_vals, 1)[0]
+        if type(give_inits) is not int:
+            init_val = give_inits[agentID]
+        else:
+            init_val = np.random.choice(commit_vals, 1)[0]
         self.initVal = init_val
         initState = [init_val]
-        for a in range(num_agents-1):
-            initState.append(null_message_val)
+        if type(give_inits) is not int:
+            #print('give', give_inits)
+            for a in range(num_agents):
+                if a == agentID:
+                    continue
+                else: 
+                    initState.append(give_inits[a])
+        else:
+            for a in range(num_agents-1):
+                initState.append(null_message_val)
         self.initState = initState
         self.state = self.initState
         self.committed_value = False
-
-    '''def commitValue(self, value):
-        self.committed_value = value'''
 
     def chooseAction(self, temperature, forceCommit=False):
    
@@ -51,7 +59,7 @@ class Agent:
             if not self.isByzantine: #if it is an honest agent
                 commit_inds = [ ind for ind, a in enumerate(self.actionSpace) if 'commit' in a ]
                 logits = logits[commit_inds] # make it so that the only logits are those for committing. 
-
+        #print('here are the logits after', logits)
         real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=0)) # currently not vectorized
         #should be able to apply sampling without computing this twice... 
         temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=0) 
@@ -71,17 +79,19 @@ class Agent:
             
 def updateStates(agent_list):
     #look at all agent actions and update the state of each to accomodate actions
-
+    #print('agent list', agent_list)
     for reciever in agent_list:
+        #print('reciever state going into the update', reciever.state)
         new_state = [reciever.initVal] # keep track of the agent's initial value, 
         #want to show to the NN each time
-        for actor_ind, actor in enumerate(agent_list):
+        actor_ind = 1 # this is always relative to the reciever. 
+        for actor in agent_list:
             if actor == reciever: # check if agent committed. 
                 continue
             # dont need to check if committed a value as already will prevent 
-            # from taking any actions other than no send. 
+            # from taking any actions other than no send.
             new_state.append( actionEffect(actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
-
+            actor_ind +=1
         reciever.state = new_state
 
 def actionEffect(action, init_val, actor_prev_action_result, receiver_id):
@@ -106,8 +116,6 @@ def actionEffect(action, init_val, actor_prev_action_result, receiver_id):
 
     else:
         return null_message_val
-    # need to add values to these. # and make it easy to parse who it is going to . 
-    # have it say agent-1, agent-2 etc. 
 
 def savePlot(to_plot, label):
     plt.figure()
@@ -127,12 +135,16 @@ def initStatesandAgents():
     #create the agents
     byzantine_list = []
     honest_list = []
+
+    give_inits = list(np.random.choice([0,1], 3))
+    #print(give_inits)
+    #print(type(give_inits))
     
     for i in range(num_agents):
         if i in byzantine_inds:
             byzantine_list.append(Agent(True, i, byzantine_inds))
         else: 
-            honest_list.append(Agent(False, i))
+            honest_list.append(Agent(False, i, give_inits=give_inits))
 
     agent_list = byzantine_list + honest_list
 
@@ -156,7 +168,7 @@ def giveReward(honest_parties, trajectory):
 
     # if they started by committing, then punish: 
     # a more handholding version would be to encourage them to send the first round. 
-    no_send_true_value_first_penalty=np.array([0,0]) # may be able to remove this later. 
+    '''no_send_true_value_first_penalty=np.array([0,0]) # may be able to remove this later. 
     #default if they did nothing wrong. 
     for key, trajectory_rounds in trajectory.items(): # going through the keys and their list of state, action, action prob pairs
         if 'Byz-False' in key: #only getting honest
@@ -165,9 +177,9 @@ def giveReward(honest_parties, trajectory):
             else: 
                 string_to_check = str(trajectory_rounds[0][1][0])
             if 'send_to_all-value_'+string_to_check != trajectory_rounds[0][2]: # getting the action from the first round
-                return dishonesty_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
+                return dishonesty_violation + round_penalty_total, satisfied_constraints
                 #no_send_true_value_first_penalty=dont_send_value_first_round_penalty
-                #break
+                #break'''
 
     com_values = []
     starting_values = []
@@ -177,20 +189,20 @@ def giveReward(honest_parties, trajectory):
 
     #checking if all the same value
     if len(set(com_values)) !=1:
-        return consistency_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
+        return consistency_violation + round_penalty_total, satisfied_constraints
 
     # want them to commit to the majority init value: 
     majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
     if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
-        return majority_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
+        return majority_violation + round_penalty_total, satisfied_constraints
 
     # checking validity
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
         if starting_values != com_values:   
-            return validity_violation + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
+            return validity_violation + round_penalty_total, satisfied_constraints
 
     satisfied_constraints=True
-    return correct_commit + no_send_true_value_first_penalty + round_penalty_total, satisfied_constraints
+    return correct_commit + round_penalty_total, satisfied_constraints
 
