@@ -11,6 +11,9 @@ def main():
     honest_policy.zero_grad()
     byz_policy.zero_grad()
 
+    for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+        net.zero_grad()
+
     curr_ep = starting_ep
     curr_temperature=starting_temp
     temperature_tracker = []
@@ -37,6 +40,9 @@ def main():
         
         honest_policy.zero_grad()
         byz_policy.zero_grad()
+
+        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+            net.zero_grad()
 
         curr_ep_trajectory_logs = []
 
@@ -110,17 +116,25 @@ def main():
 
         total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
-        losses = rl_algo(curr_ep_trajectory_logs)
+        losses, adv_losses = rl_algo(curr_ep_trajectory_logs, [honest_v_function, honest_q_function],
+        [byz_v_function, byz_q_function], toOneHotState, 
+        toOneHotActions, honest_action_to_ind, byz_action_to_ind)
+        #print("adv losses, should be flattened", adv_losses)
         honest_loss = losses[0]
         byz_loss = losses[1]
 
         honest_loss.backward()
+        honest_optimizer.step()
+
         if num_byzantine!=0:
             byz_loss.backward()
-
-        honest_optimizer.step()
-        if num_byzantine!=0:
             byz_optimizer.step()
+
+        # update the advantage functions: 
+        for ind, adv_loss in enumerate(adv_losses):
+            #print('this adv loss is:', adv_loss)
+            adv_loss.backward()
+            adv_optimizers[ind].step()
 
         #compute the loss using the RL algorithm
         honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
@@ -129,7 +143,6 @@ def main():
         honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
         total_honest_rewards.append(losses[0])
         
-
         # get all of the relevant metrics. eg. loss.item()
 
         if (curr_ep % print_every == 0):

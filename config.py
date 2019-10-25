@@ -66,12 +66,11 @@ def getActionSpace(isByzantine, byzantine_inds=None, can_send_either_value=True)
                 action_space.append('send_to_all-value_init') 
                 for commit_val in commit_vals:
                     action_space.append('commit_'+str(commit_val)) 
-            
 
     return action_space
 
 # Experiment Settings
-experiment_base_name = 'Basic_Test_Run_OnlyHonest'
+experiment_base_name = 'Adv_Func_Test_OnlyHonest'
 directory = 'runs/'
 random_seed = 27
 
@@ -91,22 +90,6 @@ commit_vals = (0,1)
 num_agents = 3
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
-# size of the vector input to the neural network. this is the states that all other agents have. 
-state_oh_size = (len(commit_vals)+1)*num_agents
-null_message_val = 2
-
-oneHotMapper = dict()
-for com_val in commit_vals:
-    z = np.zeros(len(commit_vals)+1)
-    z[com_val] = 1
-    oneHotMapper[com_val]=z
-
-null = np.zeros(len(commit_vals)+1)
-null[-1] = 1
-oneHotMapper[null_message_val]=null
-print('onehotmapper is', oneHotMapper)
-print('this script is running first, numb of agents is: ', num_agents)
-
 # Training Settings
 epochs = 700
 iters_per_epoch = 200 # I think this number is really important to tune. 
@@ -119,7 +102,9 @@ temp_anneal = 0.985 #5 is a bit better 0.99 before.
 temp_fix_point = 1.0
 honest_can_send_either_value = False # can the honest agents send only their init value or other values also? 
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
-rl_algo = vpg
+rl_algo_wanted = 'vpg'
+if rl_algo_wanted=='vpg':
+    rl_algo = vpg
 
 # lots of these refer to PPO which will be implemented later. 
 steps_per_epoch=4000
@@ -149,6 +134,10 @@ hidden_sizes = (16,8)
 activation= torch.tanh
 output_activation = None # I do softmax in the env section. 
 use_bias = True
+starting_ep = 1 # dont change
+# size of the vector input to the neural network. this is the states that all other agents have. 
+state_oh_size = (len(commit_vals)+1)*num_agents
+null_message_val = 2
 
 if load_policy:
     print("LOADING IN A policy, load_policy=True")
@@ -156,8 +145,13 @@ if load_policy:
 
 else: 
     if scenario=='Basic':
-        honest_action_space_size = len(getActionSpace(False, byzantine_inds=None, can_send_either_value=honest_can_send_either_value))
-        byz_action_space_size = len(getActionSpace(True, byzantine_inds=[0], can_send_either_value=honest_can_send_either_value))
+        honest_action_space = getActionSpace(False, byzantine_inds=None, can_send_either_value=honest_can_send_either_value)
+        honest_action_space_size = len(honest_action_space)
+        honest_action_to_ind = {a:ind for ind, a in enumerate(honest_action_space)}
+        
+        byz_action_space = getActionSpace(True, byzantine_inds=[0], can_send_either_value=honest_can_send_either_value)
+        byz_action_space_size = len(byz_action_space)
+        byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
 
         honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
         byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
@@ -165,16 +159,53 @@ else:
     honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=learning_rate)
     byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=learning_rate)
     # cant be 0 else later on there is division by zero!
-starting_ep = 1 
 
 honest_policy.train()
 byz_policy.train()
 
-mem_pin = False
-# clip=15 if want this see Protein AE code to add it. 
+oneHotStateMapper = np.eye(len(commit_vals)+1)
+honest_oneHotActionMapper = np.eye(honest_action_space_size)
+byz_oneHotActionMapper = np.eye(byz_action_space_size)
+'''for com_val in commit_vals:
+    z = np.zeros(len(commit_vals)+1)
+    z[com_val] = 1
+    oneHotMapper[com_val]=z
 
+null = np.zeros(len(commit_vals)+1)
+null[-1] = 1
+oneHotMapper[null_message_val]=null'''
+print('onehotmapper is', oneHotStateMapper)
+print('this script is running first, numb of agents is: ', num_agents)
 
-# need to make the RL neural networks: 
+##################
+# setting up the advantage function estimators
+# first the value function. input is the state and output is a real number. 
+if rl_algo_wanted=='vpg':
+    adv_hidden_sizes = (16,8)
+    adv_learning_rate=0.003
+    adv_activation= torch.relu
+    adv_output_activation = None # I do softmax in the env section. 
+    adv_use_bias = True
+    adv_output_size = 1
+    # currently byz and honest use the same network sizes and learning rates. 
+    honest_v_function = BasicPolicy(adv_output_size, state_oh_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+    honest_q_function = BasicPolicy(adv_output_size, state_oh_size+honest_action_space_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+    honest_v_function_optimizer = torch.optim.Adam(honest_v_function.parameters(), lr=adv_learning_rate)
+    honest_q_function_optimizer = torch.optim.Adam(honest_q_function.parameters(), lr=adv_learning_rate)
+
+    byz_v_function = BasicPolicy(adv_output_size, state_oh_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+    byz_q_function = BasicPolicy(adv_output_size, state_oh_size+byz_action_space_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+    byz_v_function_optimizer = torch.optim.Adam(byz_v_function.parameters(), lr=adv_learning_rate)
+    byz_q_function_optimizer = torch.optim.Adam(byz_q_function.parameters(), lr=adv_learning_rate)
+
+    for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+        net.train()
+
+adv_optimizers = [honest_v_function_optimizer, honest_q_function_optimizer, byz_v_function_optimizer, byz_q_function_optimizer]
+
+mem_pin = False # if you want to put your data in the gpu. we dont have data here so not sure if this would do anything... 
+# clip=15 if want this see my (Trenton's) Protein AE code to add it. 
+
 '''
 if load_policy:
     print("LOADING IN A policy, load_policy=True")
@@ -185,7 +216,6 @@ else:
         vf_model = VFModel(device).to(device)
 
 vf_optimizer = torch.optim.Adam(vf_model.parameters(), lr=vf_lr)
-
 '''
 
     # init the necessary/expected policys here. 

@@ -1,12 +1,15 @@
+import torch 
+import numpy as np
+#from environment_and_agent_utils import toOneHotState, toOneHotActions
 #first going to implement vpg (https://spinningup.openai.com/en/latest/algorithms/vpg.html#documentation)
 send_all_first_round_reward = 0.3
 additional_round_penalty = -0.03
 commit_to_majority = 0.5
 
-def vpg(curr_ep_trajectory_logs):
+def vpg(curr_ep_trajectory_logs, adv_honest_nets, adv_byz_nets, 
+toOneHotState, toOneHotActions, honest_action_to_ind, byz_action_to_ind ):
     # for byzantine and honest separately (need to sum over the different honest agents also):
 
-    # compute the rewards to go
     # for advantage this is discounted infinite. otherwise it is just the reward. 
     # compute advantage estimation
     # estimate policy gradient
@@ -15,16 +18,16 @@ def vpg(curr_ep_trajectory_logs):
     # curr_ep_trajectory_logs has a list of dictionaries, each dict is
     # separated out by the agent or reward and tuples of: (round_counter, state, action, action_logprob) 
 
-    
+    both_parties_adv_losses = []
     losses = [] # will store honest and then byz losses. 
-
     for isByz in [False, True]: # iterating through the honest and byzantine parties
         key_prefix = 'Byz-'+str(isByz)
         reward_ind = int(isByz) # if is byzantine, this is a 1, which is the index in the rewards for byzantine. 
         
+        num_rounds = 0 # counts up the rounds and the number of trajectories. 
         logp_rewards_sum = 0
         num_trajectories = 0 # want to count this separately for honest and byzantine
-        
+        adv_losses = []
         for trajectory_iter in curr_ep_trajectory_logs: # going through each of the trajectories 
             
             termination_reward = trajectory_iter['reward'][reward_ind]
@@ -64,19 +67,56 @@ def vpg(curr_ep_trajectory_logs):
                         #penalty for every additional round length: 
                         if not isByz:
                             rewards_to_go += additional_round_penalty
-                        
-                        logp_rewards_sum += log_prob * rewards_to_go
+
+                        ### Finished computing the rewards to go. 
+                        ### Computing the values and for the advantage function
+
+                        # getting the values. v then q. 
+                        if not isByz: 
+                            adv_nets = adv_honest_nets
+                            agent_action_ind = honest_action_to_ind[agent_round_action] # need this to convert it into a onehot for the network
+                        else: 
+                            adv_nets = adv_byz_nets
+                            agent_action_ind = byz_action_to_ind[agent_round_action]
+
+                        adv_preds = [] # v and then q
+                        #make the state onehot
+                        #print('action then state', agent_round_action, agent_round_state)
+                        oh_state= toOneHotState(agent_round_state)
+                        oh_action = toOneHotActions(isByz, agent_action_ind)
+                        oh_action_state = torch.cat( (oh_action, oh_state),dim=0)
+                        #print('concatenated action and state', oh_action_state) 
+
+                        for ind, net in enumerate(adv_nets): 
+                            #print(ind)
+                            if ind == 0: # this is the v function
+                                # could this be parallelized much more efficiently? compute once and then store?? 
+                                adv_pred = net(oh_state)
+                            else: # this is the q function
+                                adv_pred = net(oh_action_state)
+
+                            if len(adv_losses)<2:
+                                adv_losses.append( (adv_pred - rewards_to_go)**2)
+                            else:
+                                adv_losses[ind] += (adv_pred - rewards_to_go)**2
+
+                            adv_preds.append(adv_pred.detach()) # detach for the other loss. just want the scalars. 
+
+                            #print('this sshould still have tensors on it', adv_losses)
+
+                        # DO I NEED TO DETACH THE PREDICTIONS HERE?? 
+                        #print('av preds maybe detach', adv_preds)
+                        logp_rewards_sum += log_prob * (adv_preds[1] - adv_preds[0]) # Q - V advantage function
+
+                        num_rounds += 1
 
             num_trajectories +=1
 
+        adv_losses = np.asarray(adv_losses)/(num_rounds) # num rounds will also include the number of trajectories. 
+        both_parties_adv_losses += list(adv_losses) # honest and then byzantine. 
+        
         logp_rewards_sum /= num_trajectories
         logp_rewards_sum *= -1 # so that it is gradient ascent!
         losses.append(logp_rewards_sum)
 
-    return losses
-
-
-
-                
-
-
+    return losses, both_parties_adv_losses

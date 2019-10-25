@@ -4,18 +4,26 @@ from config import *
 from nn import *
 import matplotlib.pyplot as plt
 
-def toOneHot(state):
+def toOneHotState(state):
     oh = []
-    #print('full state for an agent', state)
+    #print('the state to be made one hot', state)
     for s in state:
         #print('state for one hot',s)
-        oh.append(oneHotMapper[s])
+        oh.append(oneHotStateMapper[s, :])
     oh = np.asarray(oh).flatten().T # now each column is one of the states.
     #convert ot pytorch tensor: 
-    #print('ohhh', oh)
+    #print('the resulting one hot', oh)
     oh = torch.from_numpy(oh).float().to(device)
-    #print('oehehehe', oh)
     return oh
+
+def toOneHotActions(isByz, action_ind):
+    # convert the action into an action ind:
+    if isByz: 
+        oh = byz_oneHotActionMapper[action_ind, :]
+    else: 
+        oh = honest_oneHotActionMapper[action_ind, :]
+    oh = torch.from_numpy(oh).float().to(device)
+    return oh 
 
 class Agent:
     def __init__(self, isByzantine, agentID, byzantine_inds=None, give_inits = 0):
@@ -51,7 +59,7 @@ class Agent:
     def chooseAction(self, temperature, forceCommit=False):
    
         # look at the current state and decide what action to take. 
-        oh = toOneHot(self.state) # each column is one of the states. 
+        oh = toOneHotState(self.state) # each column is one of the states. 
         #making a decision:
         #self.action = self.brain(self.actionSpace)
         # expects softmax to be applied to network first.
