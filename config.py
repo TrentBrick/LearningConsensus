@@ -91,8 +91,8 @@ num_agents = 3
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
 # Training Settings
-epochs = 1000
-iters_per_epoch = 50 # I think this number is really important to tune. 
+epochs = 500
+iters_per_epoch = 200 # I think this number is really important to tune. 
 max_round_len=1000 # max number of rounds before termination of the current simulation
 print_every = 5
 

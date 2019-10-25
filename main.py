@@ -20,6 +20,8 @@ def main():
 
     honest_wins_total = []
     total_honest_rewards = []
+    honest_adv_loss_v = []
+    honest_adv_loss_q = []
     
     #first_ep_first_batch_only=None
 
@@ -123,6 +125,9 @@ def main():
         honest_loss = losses[0]
         byz_loss = losses[1]
 
+        honest_adv_loss_v.append(adv_losses[0])
+        honest_adv_loss_q.append(adv_losses[1])
+
         honest_loss.backward()
         honest_optimizer.step()
 
@@ -161,6 +166,7 @@ def main():
             #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
             print('Current Epoch is: ', curr_ep)
             print('Current Temperature is:' , curr_temperature, '=======')
+            print('Advantage Losses', adv_losses)
             print('Losses from the Epoch', losses)
             print('=============================')
             print('=============================')
@@ -170,8 +176,8 @@ def main():
 
     # plot the change in temperature over time. 
     # plot average honest dddwin rate over time. 
-    save_labels = ['honest_wins', 'temperature', 'average_loss']
-    for to_plot, label in zip([honest_wins_total, temperature_tracker, total_honest_rewards],save_labels):
+    save_labels = ['honest_wins', 'temperature', 'average_loss', 'honest_adv_loss_v', 'honest_adv_loss_q']
+    for to_plot, label in zip([honest_wins_total, temperature_tracker, total_honest_rewards, honest_adv_loss_v, honest_adv_loss_q],save_labels):
         savePlot(to_plot, label)
 
     pickle.dump(total_trajectory_logs, open(directory+'trajectory_logs-'+experiment_name+'.pickle', 'wb'))
