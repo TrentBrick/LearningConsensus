@@ -28,10 +28,13 @@ def getActionSpace(isByzantine, byzantine_inds=None, can_send_either_value=True)
             # and no commit option
             # get every possible combination of sending actions possible
             
-            # remove the honest agents. 
+            # remove the byz agents. 
             non_byzantines = list(range(0, num_agents))
+            #print('byzantine inds', byzantine_inds)
+            #print(non_byzantines)
             for byzantine_ind in byzantine_inds:
                 non_byzantines.remove(byzantine_ind)
+            #print('non byz are', non_byzantines)
             #for val in commit_vals:
             #    non_byzantines.append('v'+str(val)) # add in the possible values that can be sent
 
@@ -53,6 +56,7 @@ def getActionSpace(isByzantine, byzantine_inds=None, can_send_either_value=True)
                         string = 'send'
                         for ind in range(choose_n):
                             string += '_agent-'+str(combo_el[ind])+'_v-'+str(cvp[ind])
+                            #print('string', string)
                         action_space.append( string ) 
             # remove any redundancies in a way that preserves order. 
             action_space = list(OrderedDict.fromkeys(action_space))
@@ -87,7 +91,7 @@ commit_vals = (0,1)
 # assumes honest and byz see current state and only current state for now. 
 # own state as a len 2 vector * num agents 
 
-num_agents = 3
+num_agents = 3 # the overall number of agents. 
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
 # Training Settings
@@ -149,9 +153,11 @@ else:
         honest_action_space_size = len(honest_action_space)
         honest_action_to_ind = {a:ind for ind, a in enumerate(honest_action_space)}
         
-        byz_action_space = getActionSpace(True, byzantine_inds=[0], can_send_either_value=honest_can_send_either_value)
+        byz_action_space = getActionSpace(True, byzantine_inds=[3], can_send_either_value=honest_can_send_either_value)
         byz_action_space_size = len(byz_action_space)
         byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
+        print('byz action to ind', byz_action_to_ind)
+        # the byz agent seems to be selecting actions that it cannot actually select. 
 
         honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
         byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, hidden_sizes, activation, output_activation, use_bias).to(device)
