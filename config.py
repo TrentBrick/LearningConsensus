@@ -94,18 +94,18 @@ commit_vals = (0,1)
 # assumes honest and byz see current state and only current state for now. 
 # own state as a len 2 vector * num agents 
 
-num_agents = 4 # the overall number of agents. 
+num_agents = 3 # the overall number of agents. 
 num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
 
 # Training Settings
-epochs = 500
+epochs = 700
 iters_per_epoch = 200 # I think this number is really important to tune. 
 max_round_len=1000 # max number of rounds before termination of the current simulation
 print_every = 5
 
 # RL Settings
 starting_temp = 6 # this is so high to try and encourage lots of exploration
-temp_anneal = 0.99 #5 is a bit better 0.99 before. 
+temp_anneal = 0.985 #5 is a bit better 0.99 before. 
 temp_fix_point = 1.0
 honest_can_send_either_value = False # can the honest agents send only their init value or other values also? 
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 

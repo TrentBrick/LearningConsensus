@@ -66,7 +66,7 @@ def main():
 
             #initialize the values and which agents are byzantine. 
             # agent_list is all agents, honest and byzantine are subsets. 
-            agent_list, honest_list, byzantine_list, byzantine_inds = initStatesandAgents()
+            agent_list, honest_list, byzantine_list = initStatesandAgents()
 
             # need to update the byzantine action to ind dictionary to account for the current byzantine index
             #byz_action_space = getActionSpace(True, byzantine_inds=byzantine_inds, can_send_either_value=honest_can_send_either_value)

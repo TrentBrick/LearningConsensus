@@ -2,9 +2,9 @@ import torch
 import numpy as np
 #from environment_and_agent_utils import toOneHotState, toOneHotActions
 #first going to implement vpg (https://spinningup.openai.com/en/latest/algorithms/vpg.html#documentation)
-send_all_first_round_reward = 0.5
+send_all_first_round_reward = 0.3
 additional_round_penalty = -0.03
-commit_to_majority = 0.2
+commit_to_majority = 0.5
 
 def vpg(curr_ep_trajectory_logs, adv_honest_nets, adv_byz_nets, 
 toOneHotState, toOneHotActions):#, honest_action_to_ind, byz_action_to_ind ):
@@ -60,12 +60,13 @@ toOneHotState, toOneHotActions):#, honest_action_to_ind, byz_action_to_ind ):
                             rewards_to_go += send_all_first_round_reward
 
                         # if this agent committed to the majority value, reward them
-                        if sum(agent_round_state) / len(agent_round_state) != 0.5:
-                            # if it is exactly in the middle then dont check or reward.
-                            majority_value = int((sum(agent_round_state) / len(agent_round_state))+0.5)
-                            if not isByz and 'commit' in agent_round_action and majority_value == int(agent_round_action.split('_')[1]) :
-                                #print('committted to majority!!!!!!', majority_value, agent_round_state, agent_round_action)
-                                rewards_to_go += commit_to_majority
+                        #if sum(agent_round_state) / len(agent_round_state) != 0.5:
+                        
+                        # if it is exactly in the middle then dont check or reward.
+                        majority_value = int((sum(agent_round_state) / len(agent_round_state))+0.5)
+                        if not isByz and 'commit' in agent_round_action and majority_value == int(agent_round_action.split('_')[1]) :
+                            #print('committted to majority!!!!!!', majority_value, agent_round_state, agent_round_action)
+                            rewards_to_go += commit_to_majority
 
                         #penalty for every additional round length: 
                         if not isByz:

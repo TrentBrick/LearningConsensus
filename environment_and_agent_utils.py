@@ -158,7 +158,8 @@ def initStatesandAgents():
 
     agent_list = byzantine_list + honest_list
 
-    return agent_list, honest_list, byzantine_list, byzantine_inds
+    return agent_list, honest_list, byzantine_list
+
 
 def honestPartiesCommit(honest_list):
     for h in honest_list:
@@ -208,7 +209,7 @@ def giveReward(honest_parties, trajectory):
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
-        if sum(starting_values) != sum(com_values):   
+        if starting_values != com_values:   
             return validity_violation + round_penalty_total, satisfied_constraints
 
     # want them to commit to the majority init value: 
