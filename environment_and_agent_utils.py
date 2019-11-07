@@ -85,7 +85,7 @@ class Agent:
         if 'commit' in self.action: # checking for a commit. 
             self.committed_value = int(self.action.split('_')[1])
 
-        return self.action, action_logprob
+        return self.action, action_logprob, action_ind
             
 def updateStates(agent_list):
     #look at all agent actions and update the state of each to accomodate actions
@@ -134,7 +134,7 @@ def savePlot(to_plot, label):
     plt.ylabel(label)
     plt.title(str(iters_per_epoch)+' iters per epoch')
     plt.legend()
-    plt.gcf().savefig(directory+label+experiment_name+'.png', dpi=200)
+    plt.gcf().savefig('runs/'+label+experiment_name+'.png', dpi=200)
 
 def initStatesandAgents():
     
@@ -158,7 +158,7 @@ def initStatesandAgents():
 
     agent_list = byzantine_list + honest_list
 
-    return agent_list, honest_list, byzantine_list
+    return agent_list, honest_list, byzantine_list, byzantine_inds
 
 def honestPartiesCommit(honest_list):
     for h in honest_list:
@@ -197,21 +197,25 @@ def giveReward(honest_parties, trajectory):
         com_values.append(h.committed_value)
         starting_values.append(h.initVal)
 
+    #print(com_values)
+    #print(starting_values)
+    #print(trajectory)
     #checking if all the same value
     if len(set(com_values)) !=1:
         return consistency_violation + round_penalty_total, satisfied_constraints
-
-    # want them to commit to the majority init value: 
-    majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
-    if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
-        return majority_violation + round_penalty_total, satisfied_constraints
 
     # checking validity
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
-        if starting_values != com_values:   
+        if sum(starting_values) != sum(com_values):   
             return validity_violation + round_penalty_total, satisfied_constraints
+
+    # want them to commit to the majority init value: 
+    if num_byzantine==0:
+        majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
+        if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
+            return majority_violation + round_penalty_total, satisfied_constraints
 
     satisfied_constraints=True
     return correct_commit + round_penalty_total, satisfied_constraints

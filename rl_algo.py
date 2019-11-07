@@ -2,12 +2,12 @@ import torch
 import numpy as np
 #from environment_and_agent_utils import toOneHotState, toOneHotActions
 #first going to implement vpg (https://spinningup.openai.com/en/latest/algorithms/vpg.html#documentation)
-send_all_first_round_reward = 0.3
+send_all_first_round_reward = 0.5
 additional_round_penalty = -0.03
-commit_to_majority = 0.5
+commit_to_majority = 0.2
 
 def vpg(curr_ep_trajectory_logs, adv_honest_nets, adv_byz_nets, 
-toOneHotState, toOneHotActions, honest_action_to_ind, byz_action_to_ind ):
+toOneHotState, toOneHotActions):#, honest_action_to_ind, byz_action_to_ind ):
     # for byzantine and honest separately (need to sum over the different honest agents also):
 
     # for advantage this is discounted infinite. otherwise it is just the reward. 
@@ -40,6 +40,7 @@ toOneHotState, toOneHotActions, honest_action_to_ind, byz_action_to_ind ):
 
                     for round_ind in reversed(range(len(trajectory_rounds))): 
                         roundd = trajectory_rounds[round_ind]
+                        agent_action_ind = roundd[4]
                         log_prob = roundd[3]
                         agent_round_state = roundd[1]
                         agent_round_action = roundd[2]
@@ -59,14 +60,18 @@ toOneHotState, toOneHotActions, honest_action_to_ind, byz_action_to_ind ):
                             rewards_to_go += send_all_first_round_reward
 
                         # if this agent committed to the majority value, reward them
-                        majority_value = int((sum(agent_round_state) / len(agent_round_state))+0.5)
-                        if not isByz and 'commit' in agent_round_action and  majority_value == int(agent_round_action.split('_')[1]) :
-                            #print('committted to majority!!!!!!', majority_value, agent_round_state, agent_round_action)
-                            rewards_to_go += commit_to_majority
+                        if sum(agent_round_state) / len(agent_round_state) != 0.5:
+                            # if it is exactly in the middle then dont check or reward.
+                            majority_value = int((sum(agent_round_state) / len(agent_round_state))+0.5)
+                            if not isByz and 'commit' in agent_round_action and majority_value == int(agent_round_action.split('_')[1]) :
+                                #print('committted to majority!!!!!!', majority_value, agent_round_state, agent_round_action)
+                                rewards_to_go += commit_to_majority
 
                         #penalty for every additional round length: 
                         if not isByz:
                             rewards_to_go += additional_round_penalty
+                        elif isByz: 
+                            rewards_to_go -= additional_round_penalty
 
                         ### Finished computing the rewards to go. 
                         ### Computing the values and for the advantage function
@@ -74,10 +79,10 @@ toOneHotState, toOneHotActions, honest_action_to_ind, byz_action_to_ind ):
                         # getting the values. v then q. 
                         if not isByz: 
                             adv_nets = adv_honest_nets
-                            agent_action_ind = honest_action_to_ind[agent_round_action] # need this to convert it into a onehot for the network
+                            #agent_action_ind = honest_action_to_ind[agent_round_action] # need this to convert it into a onehot for the network
                         else: 
                             adv_nets = adv_byz_nets
-                            agent_action_ind = byz_action_to_ind[agent_round_action]
+                            #agent_action_ind = byz_action_to_ind[agent_round_action]
 
                         adv_preds = [] # v and then q
                         #make the state onehot
