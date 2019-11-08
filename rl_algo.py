@@ -6,8 +6,7 @@ send_all_first_round_reward = 0.3
 additional_round_penalty = -0.03
 commit_to_majority = 0.5
 
-def vpg(curr_ep_trajectory_logs, adv_honest_nets, adv_byz_nets, 
-toOneHotState, toOneHotActions):#, honest_action_to_ind, byz_action_to_ind ):
+def vpg(curr_ep_trajectory_logs, toOneHotState, toOneHotActions, adv_honest_nets=None, adv_byz_nets=None, use_vpg=False ):#, honest_action_to_ind, byz_action_to_ind ):
     # for byzantine and honest separately (need to sum over the different honest agents also):
 
     # for advantage this is discounted infinite. otherwise it is just the reward. 
@@ -27,7 +26,7 @@ toOneHotState, toOneHotActions):#, honest_action_to_ind, byz_action_to_ind ):
         num_rounds = 0 # counts up the rounds and the number of trajectories. 
         logp_rewards_sum = 0
         num_trajectories = 0 # want to count this separately for honest and byzantine
-        adv_losses = []
+        adv_losses = [0,0]
         for trajectory_iter in curr_ep_trajectory_logs: # going through each of the trajectories 
             
             termination_reward = trajectory_iter['reward'][reward_ind]
@@ -78,51 +77,59 @@ toOneHotState, toOneHotActions):#, honest_action_to_ind, byz_action_to_ind ):
                         ### Computing the values and for the advantage function
 
                         # getting the values. v then q. 
-                        if not isByz: 
-                            adv_nets = adv_honest_nets
-                            #agent_action_ind = honest_action_to_ind[agent_round_action] # need this to convert it into a onehot for the network
-                        else: 
-                            adv_nets = adv_byz_nets
-                            #agent_action_ind = byz_action_to_ind[agent_round_action]
+                        if use_vpg:
+                            if not isByz: 
+                                adv_nets = adv_honest_nets
+                                #agent_action_ind = honest_action_to_ind[agent_round_action] # need this to convert it into a onehot for the network
+                            else: 
+                                adv_nets = adv_byz_nets
+                                #agent_action_ind = byz_action_to_ind[agent_round_action]
 
-                        adv_preds = [] # v and then q
-                        #make the state onehot
-                        #print('action then state', agent_round_action, agent_round_state)
-                        oh_state= toOneHotState(agent_round_state)
-                        oh_action = toOneHotActions(isByz, agent_action_ind)
-                        oh_action_state = torch.cat( (oh_action, oh_state),dim=0)
-                        #print('concatenated action and state', oh_action_state) 
+                            adv_preds = [] # v and then q
+                            #make the state onehot
+                            #print('action then state', agent_round_action, agent_round_state)
+                            oh_state= toOneHotState(agent_round_state)
+                            oh_action = toOneHotActions(isByz, agent_action_ind)
+                            oh_action_state = torch.cat( (oh_action, oh_state),dim=0)
+                            #print('checking onehotter', oh_action_state, agent_round_action, agent_action_ind)
+                            #print('concatenated action and state', oh_action_state) 
 
-                        for ind, net in enumerate(adv_nets): 
-                            #print(ind)
-                            if ind == 0: # this is the v function
-                                # could this be parallelized much more efficiently? compute once and then store?? 
-                                adv_pred = net(oh_state)
-                            else: # this is the q function
-                                adv_pred = net(oh_action_state)
+                            for ind, net in enumerate(adv_nets): 
+                                #print(ind)
+                                if ind == 0: # this is the v function
+                                    # could this be parallelized much more efficiently? compute once and then store?? 
+                                    adv_pred = net(oh_state)
+                                else: # this is the q function
+                                    adv_pred = net(oh_action_state)
 
-                            if len(adv_losses)<2:
-                                adv_losses.append( (adv_pred - rewards_to_go)**2)
-                            else:
                                 adv_losses[ind] += (adv_pred - rewards_to_go)**2
 
-                            adv_preds.append(adv_pred.detach()) # detach for the other loss. just want the scalars. 
+                                adv_preds.append(adv_pred.detach()) # detach for the other loss. just want the scalars. 
 
-                            #print('this sshould still have tensors on it', adv_losses)
+                                #print('this sshould still have tensors on it', adv_losses)
 
                         # DO I NEED TO DETACH THE PREDICTIONS HERE?? 
                         #print('av preds maybe detach', adv_preds)
-                        logp_rewards_sum += log_prob * (adv_preds[1] - adv_preds[0]) # Q - V advantage function
+                        if use_vpg: 
+                            logp_rewards_sum += log_prob * (adv_preds[1] - adv_preds[0]) # Q - V advantage function
+                        else: 
+                            logp_rewards_sum += log_prob * rewards_to_go
 
                         num_rounds += 1
 
             num_trajectories +=1
 
-        adv_losses = np.asarray(adv_losses)/(num_rounds) # num rounds will also include the number of trajectories. 
-        both_parties_adv_losses += list(adv_losses) # honest and then byzantine. 
-        
+        if adv_losses!=[0,0]: # there have been no updates because there is no byzantine. 
+            adv_losses = np.asarray(adv_losses)/(num_rounds) # num rounds will also include the number of trajectories. 
+            both_parties_adv_losses += list(adv_losses) # honest and then byzantine. 
+            
         logp_rewards_sum /= num_trajectories
         logp_rewards_sum *= -1 # so that it is gradient ascent!
+        #print('appending loss')
         losses.append(logp_rewards_sum)
+        #print('just appended losses:', losses)
 
-    return losses, both_parties_adv_losses
+    if use_vpg:
+        return losses, both_parties_adv_losses
+    else: 
+        return losses

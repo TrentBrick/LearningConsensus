@@ -77,12 +77,11 @@ experiment_base_name = 'Intro_Byzantine'
 #directory = 'runs/'
 random_seed = 27
 
-load_policy_honest = False
+load_policy_honest = True
 load_policy_byz = False
 LOAD_PATH_EXPERIMENT = 'saved_models/'
-honest_policy_LOAD_PATH = 'honest_policy'
+honest_policy_LOAD_PATH = 'Intro_Byzantinerand_seed-27_scenario-Basic_epochs-700_iters_per_ep-200_rl_algo-<function vpg at 0x104911e60>_time-2019-11-07_16:25:59.101764honest_policy'
 byz_policy_LOAD_PATH = 'byz_policy'
-
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
@@ -95,18 +94,19 @@ commit_vals = (0,1)
 # own state as a len 2 vector * num agents 
 
 num_agents = 3 # the overall number of agents. 
-num_byzantine = 0 #currently will not work for any larger values than 1!!!! 
+num_byzantine = 1 #currently will not work for any larger values than 1!!!! 
 
 # Training Settings
 epochs = 700
 iters_per_epoch = 200 # I think this number is really important to tune. 
 max_round_len=1000 # max number of rounds before termination of the current simulation
 print_every = 5
-
+use_vpg = False
 # RL Settings
-starting_temp = 6 # this is so high to try and encourage lots of exploration
+honest_starting_temp = 0.1# this is so high to try and encourage lots of exploration
+byz_starting_temp = 30
 temp_anneal = 0.985 #5 is a bit better 0.99 before. 
-temp_fix_point = 1.0
+temp_fix_point = 1
 honest_can_send_either_value = False # can the honest agents send only their init value or other values also? 
 use_heat_jumps = False # when it hits the temp fix point, increase the temp back to the starting temp. 
 rl_algo_wanted = 'vpg'
@@ -144,6 +144,7 @@ use_bias = True
 starting_ep = 1 # dont change
 # size of the vector input to the neural network. this is the states that all other agents have. 
 state_oh_size = (len(commit_vals)+1)*num_agents
+#state_oh_size_byz = (len(commit_vals)+1)*(num_agents-num_byzantine) # these byz dont have init values. 
 null_message_val = 2
 
 
@@ -153,6 +154,7 @@ if scenario=='Basic':
     #honest_action_to_ind = {a:ind for ind, a in enumerate(honest_action_space)}
     
     byz_action_space = getActionSpace(True, byzantine_inds=[0], can_send_either_value=honest_can_send_either_value)
+    print("byzantine action space", byz_action_space)
     byz_action_space_size = len(byz_action_space)
     #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
     #print('byz action to ind', byz_action_to_ind)
@@ -182,7 +184,7 @@ print('this script is running first, numb of agents is: ', num_agents)
 ##################
 # setting up the advantage function estimators
 # first the value function. input is the state and output is a real number. 
-if rl_algo_wanted=='vpg':
+if rl_algo_wanted=='vpg' and use_vpg:
     adv_hidden_sizes = (16,8)
     adv_learning_rate=0.003
     adv_activation= torch.relu
@@ -200,10 +202,11 @@ if rl_algo_wanted=='vpg':
     byz_v_function_optimizer = torch.optim.Adam(byz_v_function.parameters(), lr=adv_learning_rate)
     byz_q_function_optimizer = torch.optim.Adam(byz_q_function.parameters(), lr=adv_learning_rate)
 
+    adv_optimizers = [honest_v_function_optimizer, honest_q_function_optimizer, byz_v_function_optimizer, byz_q_function_optimizer]
+
     for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
         net.train()
 
-adv_optimizers = [honest_v_function_optimizer, honest_q_function_optimizer, byz_v_function_optimizer, byz_q_function_optimizer]
 
 mem_pin = False # if you want to put your data in the gpu. we dont have data here so not sure if this would do anything... 
 # clip=15 if want this see my (Trenton's) Protein AE code to add it. 
@@ -211,14 +214,15 @@ mem_pin = False # if you want to put your data in the gpu. we dont have data her
 if load_policy_honest:
     print("LOADING IN an honest policy, load_policy=True")
     honest_policy = torch.load(LOAD_PATH_EXPERIMENT+honest_policy_LOAD_PATH+'.torch')
-    honest_v_function = torch.load(LOAD_PATH_EXPERIMENT+honest_policy_LOAD_PATH+'_v'+'.torch')
-    honest_q_function = torch.load(LOAD_PATH_EXPERIMENT+honest_policy_LOAD_PATH+'_q'+'.torch')
+    if use_vpg:
+        honest_v_function = torch.load(LOAD_PATH_EXPERIMENT+honest_policy_LOAD_PATH+'_v'+'.torch')
+        honest_q_function = torch.load(LOAD_PATH_EXPERIMENT+honest_policy_LOAD_PATH+'_q'+'.torch')
 if load_policy_byz:
     byz_policy = torch.load(LOAD_PATH_EXPERIMENT+byz_policy_LOAD_PATH+'.torch')
-    byz_v_function = torch.load(LOAD_PATH_EXPERIMENT+byz_policy_LOAD_PATH+'_v'+'.torch')
-    byz_q_function = torch.load(LOAD_PATH_EXPERIMENT+byz_policy_LOAD_PATH+'_q'+'.torch')
-    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
-
+    if use_vpg: 
+        byz_v_function = torch.load(LOAD_PATH_EXPERIMENT+byz_policy_LOAD_PATH+'_v'+'.torch')
+        byz_q_function = torch.load(LOAD_PATH_EXPERIMENT+byz_policy_LOAD_PATH+'_q'+'.torch')
+        #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
 
 honest_policy.train()
 byz_policy.train() # the value functions i iterate through in main for train(). 

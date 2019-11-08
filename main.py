@@ -11,12 +11,14 @@ def main():
     honest_policy.zero_grad()
     byz_policy.zero_grad()
 
-    for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
-        net.zero_grad()
-        net.train()
+    if use_vpg:
+        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+            net.zero_grad()
+            net.train()
 
     curr_ep = starting_ep
-    curr_temperature=starting_temp
+    honest_curr_temperature=honest_starting_temp
+    byz_curr_temperature = byz_starting_temp
     temperature_tracker = []
 
     honest_wins_total = []
@@ -35,20 +37,22 @@ def main():
         print('Epoch', curr_ep)
 
         if use_heat_jumps:
-            curr_temperature = curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
-            if curr_temperature<temp_fix_point: # this will bump up the temperature again after having annealed it. 
-                curr_temperature = starting_temp
+            honest_curr_temperature = honest_curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
+            if honest_curr_temperature<temp_fix_point: # this will bump up the temperature again after having annealed it. 
+                honest_curr_temperature = starting_temp
         else: 
-            if curr_temperature>temp_fix_point: # only decrease temp if it is above threshold
-                curr_temperature = curr_temperature*temp_anneal
-
-        temperature_tracker.append(curr_temperature)
+            if honest_curr_temperature>temp_fix_point: # only decrease temp if it is above threshold
+                honest_curr_temperature = honest_curr_temperature*temp_anneal
+            if byz_curr_temperature>temp_fix_point:
+                byz_curr_temperature=byz_curr_temperature*temp_anneal
+        temperature_tracker.append(honest_curr_temperature)
         
         honest_policy.zero_grad()
         byz_policy.zero_grad()
 
-        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
-            net.zero_grad()
+        if use_vpg:
+            for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+                net.zero_grad()
 
         curr_ep_trajectory_logs = []
 
@@ -77,6 +81,11 @@ def main():
             while not honestPartiesCommit(honest_list):
                 # choose new actions: 
                 for agent in agent_list: 
+
+                    if agent.isByzantine: 
+                        curr_temperature = byz_curr_temperature
+                    else: 
+                        curr_temperature = honest_curr_temperature
 
                     if type(agent.committed_value) is int:      # dont change to True! Either it is False or a real value. 
                         action, action_logprob = agent.action, None
@@ -128,38 +137,46 @@ def main():
 
         total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
-        losses, adv_losses = rl_algo(curr_ep_trajectory_logs, [honest_v_function, honest_q_function],
-        [byz_v_function, byz_q_function], toOneHotState, 
-        toOneHotActions)#, honest_action_to_ind, byz_action_to_ind)
-        #print("adv losses, should be flattened", adv_losses)
+        if use_vpg:
+            losses, adv_losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
+            toOneHotActions, adv_honest_nets = [honest_v_function, honest_q_function],
+            adv_byz_nets = [byz_v_function, byz_q_function],  use_vpg=use_vpg)#, honest_action_to_ind, byz_action_to_ind)
+            #print("adv losses, should be flattened", adv_losses)
+        else: 
+            losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
+            toOneHotActions, use_vpg)
+            #print(losses)
+            #print('the loss', losses[0])
         honest_loss = losses[0] # store like this so they are interpretable and can print later if want to. 
-        byz_loss = losses[1]
         honest_losses.append(honest_loss)
-        byzantine_losses.append(byz_loss)
-
         honest_rewards.append(epoch_honest_reward)
-        byzantine_rewards.append(epoch_byz_reward)
-
-        honest_adv_loss_v.append(adv_losses[0])
-        honest_adv_loss_q.append(adv_losses[1])
+            
+        if use_vpg:
+            honest_adv_loss_v.append(adv_losses[0])
+            honest_adv_loss_q.append(adv_losses[1])
 
         honest_loss.backward()
         honest_optimizer.step()
 
         if num_byzantine!=0:
+            byz_loss = losses[1]
+            byzantine_losses.append(byz_loss)
+            byzantine_rewards.append(epoch_byz_reward)
             byz_loss.backward()
             byz_optimizer.step()
+            byzantine_losses.append(byz_loss)
 
         # update the advantage functions: 
-        for ind, adv_loss in enumerate(adv_losses):
-            #print('this adv loss is:', adv_loss)
-            adv_loss.backward()
-            adv_optimizers[ind].step()
+        if use_vpg:
+            #print('adv losses', adv_losses)
+            for ind, adv_loss in enumerate(adv_losses):
+                #print('this adv loss is:', adv_loss)
+                adv_loss.backward()
+                adv_optimizers[ind].step()
 
         #compute store the losses and other metrics: 
         honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
         honest_losses.append(honest_loss)
-        byzantine_losses.append(byz_loss)
 
         #honest_wins_total += honest_victory
         #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
@@ -179,12 +196,15 @@ def main():
             print('Average round length', avg_round_len/iters_per_epoch)
             print('Epoch Sum of Honest Rewards', epoch_honest_reward/iters_per_epoch)
             print( 'Honest wins this epoch %', sum(honest_victory)/iters_per_epoch, '=============')
-            print('Honest losses', honest_loss, 'Byz losses', byz_loss)
+            print('Honest losses', honest_loss)
+            if num_byzantine!=0:
+                print( 'Byz losses', byz_loss)
             #print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
             #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
             print('Current Epoch is: ', curr_ep)
-            print('Current Temperature is:' , curr_temperature, '=======')
-            print('Advantage Losses', adv_losses)
+            print('Current Honest Temperature is:' , honest_curr_temperature, 'Byz Temp', byz_curr_temperature, '=======')
+            if use_vpg:
+                print('Advantage Losses', adv_losses)
             print('Losses from the Epoch', losses)
             print('=============================')
             print('=============================')
@@ -203,11 +223,14 @@ def main():
 
     pickle.dump(total_trajectory_logs, open('runs/trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 
+    save_names = ['honest_policy', 'byz_policy']
+    save_models = [honest_policy, byz_policy]
+    if use_vpg:
+        save_names += ['honest_policy_v', 'honest_policy_q', 
+         'byz_policy_v', 'byz_policy_q']
+        save_models += [honest_v_function, honest_q_function, 
+        byz_v_function, byz_q_function]
 
-    save_names = ['honest_policy', 'honest_policy_v', 'honest_policy_q', 
-    'byz_policy', 'byz_policy_v', 'byz_policy_q']
-    save_models = [honest_policy, honest_v_function, honest_q_function, 
-    byz_policy, byz_v_function, byz_q_function]
     for m, n in zip(save_models, save_names):
         torch.save(m, 'saved_models/'+experiment_name+n+'.torch')
     

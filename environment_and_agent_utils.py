@@ -26,7 +26,8 @@ def toOneHotActions(isByz, action_ind):
     return oh 
 
 class Agent:
-    def __init__(self, isByzantine, agentID, byzantine_inds=None, give_inits = 0):
+    def __init__(self, isByzantine, agentID, byzantine_inds=None, give_inits = 0,
+    give_only_own_init=''):
         self.isByzantine = isByzantine
         self.agentID = agentID
         if isByzantine:
@@ -36,12 +37,17 @@ class Agent:
             #self.brain = randomActions
             self.brain = honest_policy
         self.actionSpace = getActionSpace(isByzantine, byzantine_inds, can_send_either_value=honest_can_send_either_value) 
-        if type(give_inits) is not int:
+        if isByzantine:
+            init_val = null_message_val # doesnt need an init value 
+        elif type(give_inits) is not int:
             init_val = give_inits[agentID]
+        elif type(give_only_own_init) is not str: 
+            init_val = give_only_own_init
         else:
             init_val = np.random.choice(commit_vals, 1)[0]
         self.initVal = init_val
         initState = [init_val]
+        
         if type(give_inits) is not int:
             #print('give', give_inits)
             for a in range(num_agents):
@@ -85,7 +91,7 @@ class Agent:
         if 'commit' in self.action: # checking for a commit. 
             self.committed_value = int(self.action.split('_')[1])
 
-        return self.action, action_logprob, action_ind
+        return self.action, action_logprob, action_ind.numpy()[0]
             
 def updateStates(agent_list):
     #look at all agent actions and update the state of each to accomodate actions
@@ -146,17 +152,31 @@ def initStatesandAgents():
     byzantine_list = []
     honest_list = []
 
-    #give_inits = list(np.random.choice([0,1], 3))
+    # giving the honest init vals to the byzantine. need to decide all of them here. 
+    give_inits = list(np.random.choice([0,1], num_agents))
+
     #print(give_inits)
     #print(type(give_inits))
-    
+    agent_list = []
     for i in range(num_agents):
         if i in byzantine_inds:
-            byzantine_list.append(Agent(True, i, byzantine_inds))
+            a = Agent(True, i, byzantine_inds, give_inits=give_inits)
+            byzantine_list.append(a)
+            agent_list.append(a)
         else: 
-            honest_list.append(Agent(False, i, )) #give_inits=give_inits
+            a = Agent(False, i, give_only_own_init=give_inits[i])
+            #print('honest', i, 'give init', type(give_inits[i]))
+            honest_list.append(a) #give_inits=give_inits
+            agent_list.append(a)
 
-    agent_list = byzantine_list + honest_list
+    #agent_list = byzantine_list + honest_list # NB! This means the byzantine always goes first in the ordering the
+    # agent sees.... 
+
+    #print('byz list', byzantine_inds)
+    #for a in agent_list:
+        #print(a.initVal)
+        #print(a.state)
+        #print('---')
 
     return agent_list, honest_list, byzantine_list
 
