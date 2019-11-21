@@ -12,9 +12,11 @@ def initialize_parameters():
     parser.add_argument("--directory", type=str, action='store', nargs='+', default = ["runs/"], help='directory to save results in')
     parser.add_argument("--random_seed", type=int, action='store', nargs='+', default = [27], help='seed to start the simulation from')
 
-    parser.add_argument("--load_policy", type=bool, action='store', nargs='+', default=[False], help='')
-    parser.add_argument("--load_name", type=str, action='store', nargs='+', default = ["Lolz"], help='')
-    parser.add_argument("--device", type=str, action='store', nargs='+', default = ["cpu"], help='')
+    parser.add_argument("--load_policy_honest", type=bool, action='store', nargs='+', default=[False], help='load in a pretrained policy for honest')
+    parser.add_argument("--load_policy_byz", type=bool, action='store', nargs='+', default=[False], help='load in a pretrained policy for honest')
+    parser.add_argument("--LOAD_PATH_EXPERIMENT", type=str, action='store', nargs='+', default = ['saved_models/'], help='Path to the saved policies')
+    parser.add_argument("--honest_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved honest')
+    parser.add_argument("--byz_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved byzantine')
 
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
@@ -23,12 +25,13 @@ def initialize_parameters():
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [0], help='overall number of byzantine agents in simulation')
 
     # Training Settings
-    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [500], help='number of epochs')
+    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [400], help='number of epochs')
     parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
     parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [1000], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
+    parser.add_argument("--use_vpg", type=bool, action='store', nargs='+', default = [False], help='if False will use REINFORCE')
     parser.add_argument("--starting_temp", type=int, action='store', nargs='+', default = [6], help='starting temperature')
     parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.985], help='')
     parser.add_argument("--temp_fix_point", type=float, action='store', nargs='+', default = [1.0], help='')

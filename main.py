@@ -18,31 +18,38 @@ def main(params):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     params['device'] = device
     iters_per_epoch = params['iters_per_epoch']
-    activation = getActivation(params['activation'])
-    output_activation = getActivation(params['output_activation'])
+
     # Set rl_algo
     if params['rl_algo_wanted']=='vpg':
         rl_algo = vpg
+
+    date_time = str(datetime.datetime.now()).replace(' ', '_')
+    # used to save the policy and its outputs. 
+    experiment_name = params['experiment_base_name']+"rand_seed-%s_scenario-%s_epochs-%s_iters_per_ep-%s_rl_algo-%s_time-%s" % (params['random_seed'], params['scenario'], 
+    params['epochs'], iters_per_epoch, str(rl_algo), date_time )
+
+    activation = getActivation(params['activation'])
+    output_activation = getActivation(params['output_activation'])
+    
     #Get state_oh_size
     state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
     ##Initialize policies & action spaces
-    honest_action_space, honest_action_space_size = getHonestActionSpace(params)
-    byz_action_space, byz_action_space_size = getByzantineActionSpace(params)
+    
     if params['scenario'] == 'Basic':
+        honest_action_space, honest_action_space_size = getHonestActionSpace(params)
+        byz_action_space, byz_action_space_size = getByzantineActionSpace(params)
+        
         honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], activation, output_activation, params['use_bias']).to(device)
         byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, params['hidden_sizes'], activation, output_activation, params['use_bias']).to(device)
 
     honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=params['learning_rate'])
     byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=params['learning_rate'])
 
-    honest_policy.train()
-    byz_policy.train()
-
     oneHotStateMapper = np.eye(len(params['commit_vals'])+1)
     honest_oneHotActionMapper = np.eye(honest_action_space_size)
     byz_oneHotActionMapper = np.eye(byz_action_space_size)
     ## Initialize vpg
-    if params['rl_algo_wanted']=='vpg':
+    if params['rl_algo_wanted']=='vpg' and params['use_vpg']:
         adv_hidden_sizes = (16,8)
         adv_learning_rate=0.003
         adv_activation= torch.relu
@@ -60,9 +67,28 @@ def main(params):
         byz_v_function_optimizer = torch.optim.Adam(byz_v_function.parameters(), lr=adv_learning_rate)
         byz_q_function_optimizer = torch.optim.Adam(byz_q_function.parameters(), lr=adv_learning_rate)
 
-        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
-            net.zero_grad()
         adv_optimizers = [honest_v_function_optimizer, honest_q_function_optimizer, byz_v_function_optimizer, byz_q_function_optimizer]
+
+        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+            net.train()
+            net.zero_grad()
+        
+    if params['load_policy_honest']:
+        print("LOADING IN an honest policy, load_policy=True")
+        honest_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'.torch')
+        if params['use_vpg']:
+            honest_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_v'+'.torch')
+            honest_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_q'+'.torch')
+    if params['load_policy_byz']:
+        byz_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'.torch')
+        if params['use_vpg']: 
+            byz_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_v'+'.torch')
+            byz_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_q'+'.torch')
+            #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
+
+    honest_policy.train()
+    byz_policy.train() # the value functions i iterate through in main for train(). 
+
 
     ################## Finished Initialization ###############
     print('onehotmapper is', oneHotStateMapper)
@@ -71,11 +97,9 @@ def main(params):
     honest_policy.zero_grad()
     byz_policy.zero_grad()
 
-    if params['rl_algo_wanted']=='vpg':
-        use_vpg=True
+    if params['rl_algo_wanted']=='vpg' and params['use_vpg']:
         for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
             net.train()
-
 
     curr_ep = params['starting_ep']
     curr_temperature=params['starting_temp']
@@ -114,7 +138,7 @@ def main(params):
         honest_policy.zero_grad()
         byz_policy.zero_grad()
 
-        if use_vpg:
+        if params['use_vpg']:
             for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
                 net.zero_grad()
 
@@ -201,21 +225,21 @@ def main(params):
 
         total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
-        if use_vpg:
+        if params['use_vpg']:
             losses, adv_losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
             toOneHotActions, device,oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, adv_honest_nets = [honest_v_function, honest_q_function],
-            adv_byz_nets = [byz_v_function, byz_q_function],  use_vpg=use_vpg)#, honest_action_to_ind, byz_action_to_ind)
+            adv_byz_nets = [byz_v_function, byz_q_function], use_vpg=params['use_vpg'])#, honest_action_to_ind, byz_action_to_ind)
             #print("adv losses, should be flattened", adv_losses)
         else: 
             losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
-            toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, use_vpg)
+            toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, params['use_vpg'])
             #print(losses)
             #print('the loss', losses[0])
         honest_loss = losses[0] # store like this so they are interpretable and can print later if want to. 
         honest_losses.append(honest_loss)
         honest_rewards.append(epoch_honest_reward)
             
-        if use_vpg:
+        if params['use_vpg']:
             honest_adv_loss_v.append(adv_losses[0])
             honest_adv_loss_q.append(adv_losses[1])
 
@@ -231,7 +255,7 @@ def main(params):
             byzantine_losses.append(byz_loss)
 
         # update the advantage functions: 
-        if use_vpg:
+        if params['use_vpg']:
             #print('adv losses', adv_losses)
             for ind, adv_loss in enumerate(adv_losses):
                 #print('this adv loss is:', adv_loss)
@@ -267,7 +291,7 @@ def main(params):
             #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
             print('Current Epoch is: ', curr_ep)
             print('Current Honest Temperature is:' , honest_curr_temperature, 'Byz Temp', byz_curr_temperature, '=======')
-            if use_vpg:
+            if params['use_vpg']:
                 print('Advantage Losses', adv_losses)
             print('Losses from the Epoch', losses)
             print('=============================')
@@ -289,7 +313,7 @@ def main(params):
 
     save_names = ['honest_policy', 'byz_policy']
     save_models = [honest_policy, byz_policy]
-    if use_vpg:
+    if params['use_vpg']:
         save_names += ['honest_policy_v', 'honest_policy_q', 
          'byz_policy_v', 'byz_policy_q']
         save_models += [honest_v_function, honest_q_function, 
@@ -315,26 +339,20 @@ def getActivation(activation_string):
 
 
 def getHonestActionSpace(params):
-    if params['load_policy']:
-        print("LOADING IN A policy, load_policy=True")
-    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
-    else:
-        if params['scenario']=='Basic':
-            honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
-            honest_action_space_size = len(honest_action_space)
-            #honest_action_to_ind = {a:ind for ind, a in enumerate(honest_action_space)}
+    
+    if params['scenario']=='Basic':
+        honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
+        honest_action_space_size = len(honest_action_space)
+        #honest_action_to_ind = {a:ind for ind, a in enumerate(honest_action_space)}
     return honest_action_space, honest_action_space_size#, honest_action_to_ind
 
 def getByzantineActionSpace(params):
-    if params['load_policy']:
-        print("LOADING IN A policy, load_policy=True")
-    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
-    else:
-        if params['scenario']=='Basic':  
-            byz_action_space = getActionSpace(params, True, byzantine_inds=[0], can_send_either_value=params['honest_can_send_either_value'])
-            byz_action_space_size = len(byz_action_space)
-            #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
-            #print('byz action to ind', )
+    
+    if params['scenario']=='Basic':  
+        byz_action_space = getActionSpace(params, True, byzantine_inds=[0], can_send_either_value=params['honest_can_send_either_value'])
+        byz_action_space_size = len(byz_action_space)
+        #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
+        #print('byz action to ind', )
     return byz_action_space, byz_action_space_size#, byz_action_to_ind
 
 if __name__=='__main__':
