@@ -1,24 +1,86 @@
 ''' Script that is called to allow for code to be executed.  '''
 import torch 
-from config import *
+#from config import *
 from environment_and_agent_utils import *
+from rl_algo import vpg
 import time 
 import matplotlib.pyplot as plt
 import pickle
+import datetime
+import argparse
+import itertools
+from collections import OrderedDict
 
-def main():
+def main(params):
+
+    ################## Initialize parameters #################
+    ##Get activation function from string input
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    params['device'] = device
+    iters_per_epoch = params['iters_per_epoch']
+    activation = getActivation(params['activation'])
+    output_activation = getActivation(params['output_activation'])
+    # Set rl_algo
+    if params['rl_algo_wanted']=='vpg':
+        rl_algo = vpg
+    #Get state_oh_size
+    state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
+    ##Initialize policies & action spaces
+    honest_action_space, honest_action_space_size = getHonestActionSpace(params)
+    byz_action_space, byz_action_space_size = getByzantineActionSpace(params)
+    if params['scenario'] == 'Basic':
+        honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], activation, output_activation, params['use_bias']).to(device)
+        byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, params['hidden_sizes'], activation, output_activation, params['use_bias']).to(device)
+
+    honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=params['learning_rate'])
+    byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=params['learning_rate'])
+
+    honest_policy.train()
+    byz_policy.train()
+
+    oneHotStateMapper = np.eye(len(params['commit_vals'])+1)
+    honest_oneHotActionMapper = np.eye(honest_action_space_size)
+    byz_oneHotActionMapper = np.eye(byz_action_space_size)
+    ## Initialize vpg
+    if params['rl_algo_wanted']=='vpg':
+        adv_hidden_sizes = (16,8)
+        adv_learning_rate=0.003
+        adv_activation= torch.relu
+        adv_output_activation = None # I do softmax in the env section.
+        adv_use_bias = True
+        adv_output_size = 1
+        # currently byz and honest use the same network sizes and learning rates.
+        honest_v_function = BasicPolicy(adv_output_size, state_oh_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+        honest_q_function = BasicPolicy(adv_output_size, state_oh_size+honest_action_space_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+        honest_v_function_optimizer = torch.optim.Adam(honest_v_function.parameters(), lr=adv_learning_rate)
+        honest_q_function_optimizer = torch.optim.Adam(honest_q_function.parameters(), lr=adv_learning_rate)
+
+        byz_v_function = BasicPolicy(adv_output_size, state_oh_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+        byz_q_function = BasicPolicy(adv_output_size, state_oh_size+byz_action_space_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
+        byz_v_function_optimizer = torch.optim.Adam(byz_v_function.parameters(), lr=adv_learning_rate)
+        byz_q_function_optimizer = torch.optim.Adam(byz_q_function.parameters(), lr=adv_learning_rate)
+
+        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+            net.zero_grad()
+        adv_optimizers = [honest_v_function_optimizer, honest_q_function_optimizer, byz_v_function_optimizer, byz_q_function_optimizer]
+
+    ################## Finished Initialization ###############
+    print('onehotmapper is', oneHotStateMapper)
+    print('this script is running first, numb of agents is: ', params['num_agents'])
 
     honest_policy.zero_grad()
     byz_policy.zero_grad()
 
-    if use_vpg:
+    if params['rl_algo_wanted']=='vpg':
+        use_vpg=True
         for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
-            net.zero_grad()
             net.train()
 
-    curr_ep = starting_ep
-    honest_curr_temperature=honest_starting_temp
-    byz_curr_temperature = byz_starting_temp
+
+    curr_ep = params['starting_ep']
+    curr_temperature=params['starting_temp']
+    honest_curr_temperature=params['starting_temp']
+    byz_curr_temperature = params['starting_temp']
     temperature_tracker = []
 
     honest_wins_total = []
@@ -33,18 +95,20 @@ def main():
 
     total_trajectory_logs = []
 
-    while curr_ep < (epochs+starting_ep):  
+    while curr_ep < (params['epochs']+params['starting_ep']):  
         print('Epoch', curr_ep)
 
-        if use_heat_jumps:
-            honest_curr_temperature = honest_curr_temperature*temp_anneal # anneal the temperature for selecting actions over time. 
-            if honest_curr_temperature<temp_fix_point: # this will bump up the temperature again after having annealed it. 
-                honest_curr_temperature = starting_temp
+        if params['use_heat_jumps']:
+            honest_curr_temperature = honest_curr_temperature*params['temp_anneal'] # anneal the temperature for selecting actions over time. 
+            if honest_curr_temperature<params['temp_fix_point']: # this will bump up the temperature again after having annealed it. 
+                honest_curr_temperature = params['starting_temp']
+            if byz_curr_temperature<params['temp_fix_point']:
+                byz_curr_temperature=params['starting_temp']
         else: 
-            if honest_curr_temperature>temp_fix_point: # only decrease temp if it is above threshold
-                honest_curr_temperature = honest_curr_temperature*temp_anneal
-            if byz_curr_temperature>temp_fix_point:
-                byz_curr_temperature=byz_curr_temperature*temp_anneal
+            if honest_curr_temperature>params['temp_fix_point']: # only decrease temp if it is above threshold
+                honest_curr_temperature = honest_curr_temperature*params['temp_anneal']
+            if byz_curr_temperature>params['temp_fix_point']:
+                byz_curr_temperature=byz_curr_temperature*params['temp_anneal']
         temperature_tracker.append(honest_curr_temperature)
         
         honest_policy.zero_grad()
@@ -70,7 +134,7 @@ def main():
 
             #initialize the values and which agents are byzantine. 
             # agent_list is all agents, honest and byzantine are subsets. 
-            agent_list, honest_list, byzantine_list = initStatesandAgents()
+            agent_list, honest_list, byzantine_list = initStatesandAgents(params, honest_policy, byz_policy)
 
             # need to update the byzantine action to ind dictionary to account for the current byzantine index
             #byz_action_space = getActionSpace(True, byzantine_inds=byzantine_inds, can_send_either_value=honest_can_send_either_value)
@@ -90,10 +154,10 @@ def main():
                     if type(agent.committed_value) is int:      # dont change to True! Either it is False or a real value. 
                         action, action_logprob = agent.action, None
                     else:
-                        if round_counter>max_round_len: # force the honest agents to commit to a value. 
-                            action, action_logprob, action_ind = agent.chooseAction(curr_temperature, forceCommit=True)
+                        if round_counter>params['max_round_len']: # force the honest agents to commit to a value. 
+                            action, action_logprob, action_ind = agent.chooseAction(oneHotStateMapper, curr_temperature, device, forceCommit=True)
                         else: 
-                            action, action_logprob, action_ind = agent.chooseAction(curr_temperature)
+                            action, action_logprob, action_ind = agent.chooseAction(oneHotStateMapper, curr_temperature, device)
                     
                     try: 
                         single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, agent.state, action, action_logprob, action_ind ))
@@ -105,12 +169,12 @@ def main():
 
                 # resolve the new states: 
                 for agent in agent_list: 
-                    updateStates(agent_list)
+                    updateStates(params, agent_list)
 
                 # keep making more actions, storing all 
                 # of them along with the states and rewards
 
-                if round_counter> max_round_len:
+                if round_counter> params['max_round_len']:
                     hit_max_round_len +=1
                     #print('too many rounds!!!', round_counter)
                     #print(single_run_trajectory_log)
@@ -124,7 +188,7 @@ def main():
             # upon termination, calculate the terminal reward:
             # currently just checking if the agents satisfied consistency and validity
             # recieves a tuple of the form honest reward, byzantine reward
-            reward, satisfied_constraints_this_iter = giveReward(honest_list, single_run_trajectory_log)
+            reward, satisfied_constraints_this_iter = giveReward(params, honest_list, single_run_trajectory_log)
 
             epoch_honest_reward += reward[0]
             epoch_byz_reward += reward[1]
@@ -139,12 +203,12 @@ def main():
 
         if use_vpg:
             losses, adv_losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
-            toOneHotActions, adv_honest_nets = [honest_v_function, honest_q_function],
+            toOneHotActions, device,oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, adv_honest_nets = [honest_v_function, honest_q_function],
             adv_byz_nets = [byz_v_function, byz_q_function],  use_vpg=use_vpg)#, honest_action_to_ind, byz_action_to_ind)
             #print("adv losses, should be flattened", adv_losses)
         else: 
             losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
-            toOneHotActions, use_vpg)
+            toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, use_vpg)
             #print(losses)
             #print('the loss', losses[0])
         honest_loss = losses[0] # store like this so they are interpretable and can print later if want to. 
@@ -158,7 +222,7 @@ def main():
         honest_loss.backward()
         honest_optimizer.step()
 
-        if num_byzantine!=0:
+        if params['num_byzantine']!=0:
             byz_loss = losses[1]
             byzantine_losses.append(byz_loss)
             byzantine_rewards.append(epoch_byz_reward)
@@ -184,7 +248,7 @@ def main():
         
         # get all of the relevant metrics. eg. loss.item()
 
-        if (curr_ep % print_every == 0):
+        if (curr_ep % params['print_every'] == 0):
             print('=============================')
             
             print('last trajectory from this epoch:')
@@ -197,7 +261,7 @@ def main():
             print('Epoch Sum of Honest Rewards', epoch_honest_reward/iters_per_epoch)
             print( 'Honest wins this epoch %', sum(honest_victory)/iters_per_epoch, '=============')
             print('Honest losses', honest_loss)
-            if num_byzantine!=0:
+            if params['num_byzantine']!=0:
                 print( 'Byz losses', byz_loss)
             #print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
             #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
@@ -233,8 +297,45 @@ def main():
 
     for m, n in zip(save_models, save_names):
         torch.save(m, 'saved_models/'+experiment_name+n+'.torch')
-    
-# if the policy is better then save it. is overfitting a problem in RL? 
+
+# if the policy is better then save it. is overfitting a problem in RL?
+def getActivation(activation_string):
+    if activation_string is 'tanh':
+        return torch.tanh
+    if activation_string is 'relu':
+        return torch.relu
+    if activation_string is 'sigmoid':
+        return torch.sigmoid
+    if activation_string is 'hardtanh':
+        return torch.hardtanh
+    if activation_string is 'leakyrelu':
+        return torch.leakyrelu
+    else:
+        return None
+
+
+def getHonestActionSpace(params):
+    if params['load_policy']:
+        print("LOADING IN A policy, load_policy=True")
+    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
+    else:
+        if params['scenario']=='Basic':
+            honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
+            honest_action_space_size = len(honest_action_space)
+            #honest_action_to_ind = {a:ind for ind, a in enumerate(honest_action_space)}
+    return honest_action_space, honest_action_space_size#, honest_action_to_ind
+
+def getByzantineActionSpace(params):
+    if params['load_policy']:
+        print("LOADING IN A policy, load_policy=True")
+    #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
+    else:
+        if params['scenario']=='Basic':  
+            byz_action_space = getActionSpace(params, True, byzantine_inds=[0], can_send_either_value=params['honest_can_send_either_value'])
+            byz_action_space_size = len(byz_action_space)
+            #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
+            #print('byz action to ind', )
+    return byz_action_space, byz_action_space_size#, byz_action_to_ind
 
 if __name__=='__main__':
     main()

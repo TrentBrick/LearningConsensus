@@ -6,7 +6,10 @@ send_all_first_round_reward = 0.3
 additional_round_penalty = -0.03
 commit_to_majority = 0.5
 
-def vpg(curr_ep_trajectory_logs, toOneHotState, toOneHotActions, adv_honest_nets=None, adv_byz_nets=None, use_vpg=False ):#, honest_action_to_ind, byz_action_to_ind ):
+def vpg(curr_ep_trajectory_logs, toOneHotState, 
+toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper,
+adv_honest_nets=None, adv_byz_nets=None, 
+use_vpg=False ):#, honest_action_to_ind, byz_action_to_ind ):
     # for byzantine and honest separately (need to sum over the different honest agents also):
 
     # for advantage this is discounted infinite. otherwise it is just the reward. 
@@ -88,8 +91,8 @@ def vpg(curr_ep_trajectory_logs, toOneHotState, toOneHotActions, adv_honest_nets
                             adv_preds = [] # v and then q
                             #make the state onehot
                             #print('action then state', agent_round_action, agent_round_state)
-                            oh_state= toOneHotState(agent_round_state)
-                            oh_action = toOneHotActions(isByz, agent_action_ind)
+                            oh_state= toOneHotState(agent_round_state, oneHotStateMapper, device)
+                            oh_action = toOneHotActions(isByz, agent_action_ind, byz_oneHotActionMapper, honest_oneHotActionMapper, device)
                             oh_action_state = torch.cat( (oh_action, oh_state),dim=0)
                             #print('checking onehotter', oh_action_state, agent_round_action, agent_action_ind)
                             #print('concatenated action and state', oh_action_state) 
