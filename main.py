@@ -127,15 +127,15 @@ def main(params):
     byzantine_rewards = []
     total_trajectory_logs = []
 
-    #params['byz_honest_train_ratio']+=1 # so that the ratio works. 
-
     total_epochs = params['epochs']*params['byz_honest_train_ratio']
 
     while curr_ep < (total_epochs+params['starting_ep']):  
         print('Epoch', curr_ep)
 
-        honest_policy.zero_grad()
-        byz_policy.zero_grad()
+        #honest_policy.zero_grad()
+        honest_optimizer.zero_grad()
+        #byz_policy.zero_grad()
+        byz_optimizer.zero_grad()
 
         if curr_ep % params['byz_honest_train_ratio']!=0:
             # freeze the weights of the honest
@@ -163,7 +163,7 @@ def main(params):
         temperature_tracker.append(honest_curr_temperature)
 
         if params['use_vpg']:
-            for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+            for net in [honest_v_function_optimizer, honest_q_function_optimizer, byz_v_function_optimizer, byz_q_function_optimizer]:
                 net.zero_grad()
 
         curr_ep_trajectory_logs = []
@@ -247,6 +247,8 @@ def main(params):
             single_run_trajectory_log['reward'] = reward
             curr_ep_trajectory_logs.append(single_run_trajectory_log)
 
+        # NEED TO REWRITE THIS AS A FILE.WRITE TEXT OUTPUT. DONT STORE THIS AS IT HAS ALL OF THE TENSOR LOSSES. 
+        # WILL BLOW UP THE MEMORY. 
         #total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
         if params['use_vpg']:
@@ -258,29 +260,26 @@ def main(params):
         else: 
             losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
             toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, params['send_all_first_round_reward'],
-            params['additional_round_penalty'], params['use_vpg'])
+            params['additional_round_penalty'], use_vpg=params['use_vpg'])
             #print(losses)
             #print('the loss', losses[0])
+
         honest_loss = losses[0] # store like this so they are interpretable and can print later if want to. 
-        honest_losses.append(honest_loss)
-        honest_rewards.append(epoch_honest_reward)
-            
-        if params['use_vpg']:
-            honest_adv_loss_v.append(adv_losses[0])
-            honest_adv_loss_q.append(adv_losses[1])
 
         if params['train_honest'] and byz_train_only==False:
             honest_loss.backward()
             honest_optimizer.step()
 
+        honest_losses.append(honest_loss.detach())
+        honest_rewards.append(epoch_honest_reward)
+
         if params['num_byzantine']!=0:
             byz_loss = losses[1]
-            byzantine_losses.append(byz_loss)
-            byzantine_rewards.append(epoch_byz_reward)
-            byzantine_losses.append(byz_loss)
             if params['train_byz']:
                 byz_loss.backward()
                 byz_optimizer.step()
+            byzantine_losses.append(byz_loss.detach())
+            byzantine_rewards.append(epoch_byz_reward)
 
         # update the advantage functions: 
         if params['use_vpg']:
@@ -289,10 +288,13 @@ def main(params):
                 #print('this adv loss is:', adv_loss)
                 adv_loss.backward()
                 adv_optimizers[ind].step()
+            
+        if params['use_vpg']:
+            honest_adv_loss_v.append(adv_losses[0].detach())
+            honest_adv_loss_q.append(adv_losses[1].detach())
 
         #compute store the losses and other metrics: 
         honest_victory = [ 1 if s==True else 0 for s in satisfied_constraints  ]
-        honest_losses.append(honest_loss)
 
         #honest_wins_total += honest_victory
         #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
