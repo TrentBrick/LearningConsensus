@@ -127,12 +127,15 @@ def main(params):
     byzantine_rewards = []
     total_trajectory_logs = []
 
-    params['byz_honest_train_ratio']+=1 # so that the ratio works. 
+    #params['byz_honest_train_ratio']+=1 # so that the ratio works. 
 
     total_epochs = params['epochs']*params['byz_honest_train_ratio']
 
     while curr_ep < (total_epochs+params['starting_ep']):  
         print('Epoch', curr_ep)
+
+        honest_policy.zero_grad()
+        byz_policy.zero_grad()
 
         if curr_ep % params['byz_honest_train_ratio']!=0:
             # freeze the weights of the honest
@@ -158,9 +161,6 @@ def main(params):
             if byz_curr_temperature>params['temp_fix_point']:
                 byz_curr_temperature=byz_curr_temperature*params['temp_anneal']
         temperature_tracker.append(honest_curr_temperature)
-        
-        honest_policy.zero_grad()
-        byz_policy.zero_grad()
 
         if params['use_vpg']:
             for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
@@ -247,7 +247,7 @@ def main(params):
             single_run_trajectory_log['reward'] = reward
             curr_ep_trajectory_logs.append(single_run_trajectory_log)
 
-        total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
+        #total_trajectory_logs.append(curr_ep_trajectory_logs[-1] )
 
         if params['use_vpg']:
             losses, adv_losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
