@@ -19,6 +19,7 @@ def initialize_parameters():
     parser.add_argument("--byz_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved byzantine')
     parser.add_argument("--train_honest", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the honest are not trained. ')
     parser.add_argument("--train_byz", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the byz are not trained. ')
+    parser.add_argument("--byz_honest_train_ratio", type=int, action='store', nargs='+', default = [1], help='Ratio of epochs we train byzantine for 1 honest. a value of 1 means 1:1')
 
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
@@ -33,6 +34,7 @@ def initialize_parameters():
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
+    parser.add_argument("--use_PKI", type=bool, action='store', nargs='+', default = [False], help='Use Public Key Infrastructure?')
     parser.add_argument("--use_vpg", type=bool, action='store', nargs='+', default = [False], help='if False will use REINFORCE')
     parser.add_argument("--honest_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
     parser.add_argument("--byz_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')

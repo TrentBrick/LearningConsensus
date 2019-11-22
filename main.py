@@ -32,7 +32,13 @@ def main(params):
     output_activation = getActivation(params['output_activation'])
     
     #Get state_oh_size
-    state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
+    if params['use_PKI']: 
+        state_oh_size = (len(params['commit_vals'])+1)*(params['num_agents']**2-params['num_agents']+1)
+    else: 
+        state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
+
+    print('state oh size:', state_oh_size)
+
     ##Initialize policies & action spaces
     
     if params['scenario'] == 'Basic':
@@ -45,7 +51,7 @@ def main(params):
     honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=params['learning_rate'])
     byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=params['learning_rate'])
 
-    oneHotStateMapper = np.eye(len(params['commit_vals'])+1)
+    oneHotStateMapper = np.eye(len(params['commit_vals'])+1) # number of unique values that can be in the state. 
     honest_oneHotActionMapper = np.eye(honest_action_space_size)
     byz_oneHotActionMapper = np.eye(byz_action_space_size)
     ## Initialize vpg
@@ -119,13 +125,26 @@ def main(params):
     byzantine_losses = []
     honest_rewards = []
     byzantine_rewards = []
-    
-    #first_ep_first_batch_only=None
-
     total_trajectory_logs = []
 
-    while curr_ep < (params['epochs']+params['starting_ep']):  
+    params['byz_honest_train_ratio']+=1 # so that the ratio works. 
+
+    total_epochs = params['epochs']*params['byz_honest_train_ratio']
+
+    while curr_ep < (total_epochs+params['starting_ep']):  
         print('Epoch', curr_ep)
+
+        if curr_ep % params['byz_honest_train_ratio']!=0:
+            # freeze the weights of the honest
+            honest_policy.eval()
+            byz_policy.eval()
+            byz_train_only=True
+            #print('training only byz')
+        else: 
+            honest_policy.train()
+            byz_policy.train()
+            byz_train_only=False
+            #print('training both')
 
         if params['use_heat_jumps']:
             honest_curr_temperature = honest_curr_temperature*params['temp_anneal'] # anneal the temperature for selecting actions over time. 
@@ -250,7 +269,7 @@ def main(params):
             honest_adv_loss_v.append(adv_losses[0])
             honest_adv_loss_q.append(adv_losses[1])
 
-        if params['train_honest']:
+        if params['train_honest'] and byz_train_only==False:
             honest_loss.backward()
             honest_optimizer.step()
 

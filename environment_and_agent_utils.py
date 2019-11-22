@@ -14,7 +14,7 @@ def getActionSpace(params, isByzantine, byzantine_inds=None, can_send_either_val
     ## if byzantine then global view over all Byzantines,
     # means that the same agent gets to act multiple times in the round
     # for honest, they only currently have option to send to everyone.
-    parties = set(range(params['num_agents']))
+    #parties = set(range(params['num_agents']))
     if params['scenario'] == 'Basic':
 
         action_space = []
@@ -79,6 +79,7 @@ def toOneHotState(state, oneHotStateMapper, device):
         #print('state for one hot',s)
         oh.append(oneHotStateMapper[s, :])
     oh = np.asarray(oh).flatten().T # now each column is one of the states.
+    #print("one hot", oh, oh.shape)
     #convert ot pytorch tensor: 
     #print('the resulting one hot', oh)
     oh = torch.from_numpy(oh).float().to(device)
@@ -115,18 +116,22 @@ class Agent:
             init_val = np.random.choice(params['commit_vals'], 1)[0]
         self.initVal = init_val
         initState = [init_val]
-        
-        if type(give_inits) is not int:
+        if type(give_inits) is not int: # otherwise it is a list of the other values of everyone
             #print('give', give_inits)
             for a in range(params['num_agents']):
                 if a == agentID:
                     continue
                 else: 
                     initState.append(give_inits[a])
+                if params['use_PKI']: # need to set null values as nobody has recieved values from anybody else
+                    initState += [params['null_message_val']]*(params['num_agents']-1)
         else:
             for a in range(params['num_agents']-1):
                 initState.append(params['null_message_val'])
+                if params['use_PKI']: # need to set null values as nobody has recieved values from anybody else
+                    initState += [params['null_message_val']]*(params['num_agents']-1)
         self.initState = initState
+        #print(' init state is: ', initState)
         self.state = self.initState
         self.committed_value = False
 
@@ -177,6 +182,26 @@ def updateStates(params, agent_list):
             new_state.append( actionEffect(params, actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
             actor_ind +=1
         reciever.state = new_state
+
+    # this internally resolves all of the agents and sets their new state. 
+    # Now if PKI I need to add on to each state the states the other agents recieved
+    if params['use_PKI']:
+        list_of_new_states = [] # need to get new states for all before updating them
+        for reciever in agent_list:
+            new_state = [reciever.initVal] # get the current state that has been set. 
+            actor_ind = 1 # relative indexing. 
+            for actor in agent_list:
+                if actor == reciever: # check if agent committed. 
+                    continue
+                
+                new_state.append(reciever.state[actor_ind]) # appending what we already have
+                new_state += actor.state[1:]
+                actor_ind +=1 # relative indexing. 
+            list_of_new_states.append(new_state)
+        
+        for i, reciever in enumerate(agent_list): # actually update the states of each
+            reciever.state = list_of_new_states[i] 
+                
 
 def actionEffect(params, action, init_val, actor_prev_action_result, receiver_id):
     # return the effects of a particular action
