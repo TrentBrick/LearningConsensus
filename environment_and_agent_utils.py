@@ -106,7 +106,7 @@ class Agent:
             self.brain = honest_policy
         self.actionSpace = getActionSpace(params, isByzantine, byzantine_inds, can_send_either_value=params['honest_can_send_either_value']) 
         if isByzantine:
-            init_val = null_message_val # doesnt need an init value 
+            init_val = params['null_message_val'] # doesnt need an init value 
         elif type(give_inits) is not int:
             init_val = give_inits[agentID]
         elif type(give_only_own_init) is not str: 
@@ -237,15 +237,6 @@ def initStatesandAgents(params, honest_policy, byz_policy):
             honest_list.append(a) #give_inits=give_inits
             agent_list.append(a)
 
-    #agent_list = byzantine_list + honest_list # NB! This means the byzantine always goes first in the ordering the
-    # agent sees.... 
-
-    #print('byz list', byzantine_inds)
-    #for a in agent_list:
-        #print(a.initVal)
-        #print(a.state)
-        #print('---')
-
     return agent_list, honest_list, byzantine_list
 
 
@@ -262,8 +253,7 @@ def giveReward(params, honest_parties, trajectory):
 
     satisfied_constraints = False
     #penalty for the number of rounds
-    num_rounds = len(trajectory[list(trajectory.keys())[0]]) # already iterating through the 
-    round_penalty_total = num_rounds*params['round_penalty']
+    #num_rounds = len(trajectory[list(trajectory.keys())[0]]) # already iterating through the 
 
     # if they started by committing, then punish: 
     # a more handholding version would be to encourage them to send the first round. 
@@ -291,21 +281,21 @@ def giveReward(params, honest_parties, trajectory):
     #print(trajectory)
     #checking if all the same value
     if len(set(com_values)) !=1:
-        return params['consistency_violation'] + round_penalty_total, satisfied_constraints
+        return params['consistency_violation'], satisfied_constraints
 
     # checking validity
     if len(set(starting_values)) ==1:
         # if they are all the same and they havent 
         # agreed on the same value, then return -1
         if starting_values != com_values:   
-            return params['validity_violation'] + round_penalty_total, satisfied_constraints
+            return params['validity_violation'], satisfied_constraints
 
     # want them to commit to the majority init value: 
     if params['num_byzantine']==0:
         majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
         if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
-            return params['majority_violation'] + round_penalty_total, satisfied_constraints
+            return params['majority_violation'], satisfied_constraints
 
     satisfied_constraints=True
-    return params['correct_commit'] + round_penalty_total, satisfied_constraints
+    return params['correct_commit'], satisfied_constraints
 

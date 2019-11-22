@@ -26,7 +26,7 @@ def main(params):
     date_time = str(datetime.datetime.now()).replace(' ', '_')
     # used to save the policy and its outputs. 
     experiment_name = params['experiment_base_name']+"rand_seed-%s_scenario-%s_epochs-%s_iters_per_ep-%s_rl_algo-%s_time-%s" % (params['random_seed'], params['scenario'], 
-    params['epochs'], iters_per_epoch, str(rl_algo), date_time )
+    params['epochs'], iters_per_epoch, params['rl_algo_wanted'], date_time )
 
     activation = getActivation(params['activation'])
     output_activation = getActivation(params['output_activation'])
@@ -75,19 +75,25 @@ def main(params):
         
     if params['load_policy_honest']:
         print("LOADING IN an honest policy, load_policy=True")
-        honest_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'.torch')
+        honest_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['honest_policy_LOAD_PATH']+'.torch')
         if params['use_vpg']:
-            honest_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_v'+'.torch')
-            honest_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_q'+'.torch')
+            honest_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['honest_policy_LOAD_PATH']+'_v'+'.torch')
+            honest_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['honest_policy_LOAD_PATH']+'_q'+'.torch')
     if params['load_policy_byz']:
-        byz_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'.torch')
+        byz_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['byz_policy_LOAD_PATH']+'.torch')
         if params['use_vpg']: 
-            byz_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_v'+'.torch')
-            byz_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_q'+'.torch')
+            byz_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['byz_policy_LOAD_PATH']+'_v'+'.torch')
+            byz_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['byz_policy_LOAD_PATH']+'_q'+'.torch')
             #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
 
-    honest_policy.train()
-    byz_policy.train() # the value functions i iterate through in main for train(). 
+    if params['train_honest']:
+        honest_policy.train()
+    else: 
+        honest_policy.eval()
+    if params['train_byz']:
+        byz_policy.train() # the value functions i iterate through in main for train().
+    else: 
+        byz_policy.eval() 
 
 
     ################## Finished Initialization ###############
@@ -102,9 +108,8 @@ def main(params):
             net.train()
 
     curr_ep = params['starting_ep']
-    curr_temperature=params['starting_temp']
-    honest_curr_temperature=params['starting_temp']
-    byz_curr_temperature = params['starting_temp']
+    honest_curr_temperature=params['honest_starting_temp']
+    byz_curr_temperature = params['byz_starting_temp']
     temperature_tracker = []
 
     honest_wins_total = []
@@ -227,12 +232,14 @@ def main(params):
 
         if params['use_vpg']:
             losses, adv_losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
-            toOneHotActions, device,oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, adv_honest_nets = [honest_v_function, honest_q_function],
+            toOneHotActions, device,oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, params['send_all_first_round_reward'],
+            params['additional_round_penalty'], adv_honest_nets = [honest_v_function, honest_q_function],
             adv_byz_nets = [byz_v_function, byz_q_function], use_vpg=params['use_vpg'])#, honest_action_to_ind, byz_action_to_ind)
             #print("adv losses, should be flattened", adv_losses)
         else: 
             losses = rl_algo(curr_ep_trajectory_logs, toOneHotState, 
-            toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, params['use_vpg'])
+            toOneHotActions, device, oneHotStateMapper, byz_oneHotActionMapper, honest_oneHotActionMapper, params['send_all_first_round_reward'],
+            params['additional_round_penalty'], params['use_vpg'])
             #print(losses)
             #print('the loss', losses[0])
         honest_loss = losses[0] # store like this so they are interpretable and can print later if want to. 
@@ -243,16 +250,18 @@ def main(params):
             honest_adv_loss_v.append(adv_losses[0])
             honest_adv_loss_q.append(adv_losses[1])
 
-        honest_loss.backward()
-        honest_optimizer.step()
+        if params['train_honest']:
+            honest_loss.backward()
+            honest_optimizer.step()
 
         if params['num_byzantine']!=0:
             byz_loss = losses[1]
             byzantine_losses.append(byz_loss)
             byzantine_rewards.append(epoch_byz_reward)
-            byz_loss.backward()
-            byz_optimizer.step()
             byzantine_losses.append(byz_loss)
+            if params['train_byz']:
+                byz_loss.backward()
+                byz_optimizer.step()
 
         # update the advantage functions: 
         if params['use_vpg']:
@@ -307,7 +316,7 @@ def main(params):
     for to_plot, label in zip([honest_wins_total, temperature_tracker, 
     honest_losses, byzantine_losses, honest_adv_loss_v, 
     honest_adv_loss_q, honest_rewards, byzantine_rewards],save_labels):
-        savePlot(to_plot, label)
+        savePlot(params, to_plot, label, experiment_name)
 
     pickle.dump(total_trajectory_logs, open('runs/trajectory_logs-'+experiment_name+'.pickle', 'wb'))
 

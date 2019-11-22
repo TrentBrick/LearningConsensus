@@ -17,6 +17,8 @@ def initialize_parameters():
     parser.add_argument("--LOAD_PATH_EXPERIMENT", type=str, action='store', nargs='+', default = ['saved_models/'], help='Path to the saved policies')
     parser.add_argument("--honest_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved honest')
     parser.add_argument("--byz_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved byzantine')
+    parser.add_argument("--train_honest", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the honest are not trained. ')
+    parser.add_argument("--train_byz", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the byz are not trained. ')
 
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
@@ -32,7 +34,8 @@ def initialize_parameters():
 
     # RL Settings
     parser.add_argument("--use_vpg", type=bool, action='store', nargs='+', default = [False], help='if False will use REINFORCE')
-    parser.add_argument("--starting_temp", type=int, action='store', nargs='+', default = [6], help='starting temperature')
+    parser.add_argument("--honest_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
+    parser.add_argument("--byz_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
     parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.985], help='')
     parser.add_argument("--temp_fix_point", type=float, action='store', nargs='+', default = [1.0], help='')
     parser.add_argument("--honest_can_send_either_value", type=bool, action='store', nargs='+', default = [False], help='can the honest agents send only their init value or other values also?')
@@ -50,12 +53,12 @@ def initialize_parameters():
     parser.add_argument("--save_freq", type=int, action='store', nargs='+', default = [10], help='')
 
     ## Penalties for rewards
-    parser.add_argument("--dishonesty_violation", action ='store', type=str, default = [0,1], nargs='+')
+    parser.add_argument("--send_all_first_round_reward", action ='store', type=str, default = [0.3], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
-    parser.add_argument("--validity_violation", action ='store', type=str, default = [-2,1], nargs='+')
-    parser.add_argument("--majority_violation", action ='store', type=str, default = [-1,1], nargs='+')
+    parser.add_argument("--validity_violation", action ='store', type=str, default = [-4,1], nargs='+')
+    parser.add_argument("--majority_violation", action ='store', type=str, default = [-0.5,0.5], nargs='+')
     parser.add_argument("--correct_commit", action ='store', type=str, default = [1,-1], nargs='+')
-    parser.add_argument("--round_penalty", action ='store', type=str, default = [0, 0], nargs='+')
+    parser.add_argument("--additional_round_penalty", action ='store', type=str, default = [-0.03], nargs='+')
 
     ## NN Settings
     parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
@@ -72,12 +75,10 @@ def initialize_parameters():
 
     args.hidden_sizes = buildTuple(args.hidden_sizes)
     args.commit_vals = buildTuple(args.commit_vals)
-    args.dishonesty_violation = buildNPArray(args.dishonesty_violation)
     args.consistency_violation = buildNPArray(args.consistency_violation)
     args.validity_violation = buildNPArray(args.validity_violation)
     args.majority_violation = buildNPArray(args.majority_violation)
     args.correct_commit = buildNPArray(args.correct_commit)
-    args.round_penalty = buildNPArray(args.round_penalty)
     # print(args)
 
     ## Create permutation matrix
