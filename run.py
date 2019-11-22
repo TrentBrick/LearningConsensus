@@ -23,7 +23,7 @@ def initialize_parameters():
 
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
-    parser.add_argument("-commit_vals", action ='store', type=str, default = (0,1), nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
+    parser.add_argument("-commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [3], help='overall number of agents in simulation')
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [0], help='overall number of byzantine agents in simulation')
 
@@ -65,7 +65,7 @@ def initialize_parameters():
     ## NN Settings
     parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
-    parser.add_argument("--hidden_sizes", action ='store', type=str, default = (16,8), nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
+    parser.add_argument("--hidden_sizes", action ='store', type=str, default = ['(16,8)'], nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
     parser.add_argument("--activation", type=str, action='store', nargs='+', default = ["tanh"], help='Activation functions - tanh, relu, sigmoid')
     parser.add_argument("--output_activation", type=None, action='store', nargs='+', default = [None], help='')
     parser.add_argument("--use_bias", type=bool, action='store', nargs='+', default = [True], help='')
@@ -99,12 +99,19 @@ def buildTuple(argument):
     count = 0
     values = []
     curr_tuple = ()
+    print(argument)
     for val in argument:
-        curr_tuple = curr_tuple + (int(val),)
-        count+=1
-        if count%2 == 0:
-            values.append(curr_tuple)
-            curr_tuple = ()
+        val = val.replace("(", ",")
+        val = val.replace(")", ",")
+        val = val.split(",")
+        print(val)
+        for element in range(0, len(val)):
+            if val[element] is not "":
+                curr_tuple = curr_tuple + (int(val[element]),)
+        values.append(curr_tuple)
+        curr_tuple = ()
+        count = count + 1
+    print (values)
     return values
 
 def buildNPArray(argument):
