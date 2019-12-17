@@ -28,7 +28,7 @@ use_vpg=False ):#, honest_action_to_ind, byz_action_to_ind ):
         num_rounds = 0 # counts up the rounds and the number of trajectories. 
         logp_rewards_sum = 0
         num_trajectories = 0 # want to count this separately for honest and byzantine
-        adv_losses = [0,0]
+        adv_losses = [0,0] # stores the losses for either honest or byzantine. 
         for trajectory_iter in curr_ep_trajectory_logs: # going through each of the trajectories 
             
             termination_reward = trajectory_iter['reward'][reward_ind]
@@ -122,7 +122,7 @@ use_vpg=False ):#, honest_action_to_ind, byz_action_to_ind ):
             num_trajectories +=1
 
         if adv_losses!=[0,0]: # there have been no updates because there is no byzantine. 
-            adv_losses = np.asarray(adv_losses)/(num_rounds) # num rounds will also include the number of trajectories. 
+            adv_losses = np.asarray(adv_losses)/(num_rounds) # num rounds also includes the number of trajectories. 
             both_parties_adv_losses += list(adv_losses) # honest and then byzantine. 
             
         logp_rewards_sum /= num_trajectories

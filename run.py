@@ -8,18 +8,18 @@ import main
 def initialize_parameters():
     parser = argparse.ArgumentParser()
     # Experiment Settings
-    parser.add_argument("--experiment_base_name", type=str, action='store', nargs='+', default=["TestRun"], help="name of experiment")
+    parser.add_argument("--exp_name", type=str, action='store', nargs='+', default=["TestRun"], help="name of experiment")
     parser.add_argument("--directory", type=str, action='store', nargs='+', default = ["runs/"], help='directory to save results in')
     parser.add_argument("--random_seed", type=int, action='store', nargs='+', default = [27], help='seed to start the simulation from')
 
-    parser.add_argument("--load_policy_honest", type=bool, action='store', nargs='+', default=[False], help='load in a pretrained policy for honest')
-    parser.add_argument("--load_policy_byz", type=bool, action='store', nargs='+', default=[False], help='load in a pretrained policy for honest')
+    parser.add_argument("--load_policy_honest", type=str, action='store', nargs='+', default=['None'], help='path to load in a pretrained policy for honest')
+    parser.add_argument("--load_policy_byz", type=str, action='store', nargs='+', default=['None'], help='path to load in a pretrained policy for honest')
     parser.add_argument("--LOAD_PATH_EXPERIMENT", type=str, action='store', nargs='+', default = ['saved_models/'], help='Path to the saved policies')
-    parser.add_argument("--honest_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved honest')
-    parser.add_argument("--byz_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved byzantine')
+    #parser.add_argument("--honest_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved honest')
+    #parser.add_argument("--byz_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved byzantine')
     parser.add_argument("--train_honest", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the honest are not trained. ')
     parser.add_argument("--train_byz", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the byz are not trained. ')
-    parser.add_argument("--byz_honest_train_ratio", type=int, action='store', nargs='+', default = [1], help='Ratio of epochs we train byzantine for 1 honest. a value of 1 means 1:1')
+    parser.add_argument("--byz_honest_train_ratio", type=int, action='store', nargs='+', default = [1], help='Ratio of epochs we train byzantine for 1 honest. A value of 1 means has no ratio training')
 
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
@@ -28,20 +28,23 @@ def initialize_parameters():
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [0], help='overall number of byzantine agents in simulation')
 
     # Training Settings
-    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [400], help='number of epochs')
-    parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
+    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [500], help='number of epochs')
+    parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [300], help='number of protocol simulations per epoch')
     parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [10], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
     parser.add_argument("--use_PKI", type=bool, action='store', nargs='+', default = [False], help='Use Public Key Infrastructure?')
     parser.add_argument("--use_vpg", type=bool, action='store', nargs='+', default = [False], help='if False will use REINFORCE')
+    parser.add_argument("--vpg_epochs_ratio", type=int, action='store', nargs='+', default = [2], help='Ratio of epochs we train only the vpg functions and not reinforce. A value of 1 means 1:1')
+    
     parser.add_argument("--honest_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
     parser.add_argument("--byz_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
-    parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.985], help='')
-    parser.add_argument("--temp_fix_point", type=float, action='store', nargs='+', default = [1.0], help='')
+    parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.98], help='rate at which the temperature anneals per epoch')
+    parser.add_argument("--temp_fix_point", type=float, action='store', nargs='+', default = [1.0], help='point at which temperature will stop annealing or if heat jumps are on, the point at which the temperature will bounce back to its starting point')
     parser.add_argument("--honest_can_send_either_value", type=bool, action='store', nargs='+', default = [False], help='can the honest agents send only their init value or other values also?')
     parser.add_argument("--use_heat_jumps", type=bool, action='store', nargs='+', default = [False], help='when it hits the temp fix point, increase the temp back to the starting temp')
+    
     parser.add_argument("--rl_algo_wanted", type=str, action='store', nargs='+', default = ['vpg'], help='')
     parser.add_argument("--steps_per_epoch", type=int, action='store', nargs='+', default = [4000], help='')
     parser.add_argument("--gamma", type=float, action='store', nargs='+', default = [0.999], help='')
@@ -57,7 +60,7 @@ def initialize_parameters():
     ## Penalties for rewards
     parser.add_argument("--send_all_first_round_reward", action ='store', type=str, default = [0.3], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
-    parser.add_argument("--validity_violation", action ='store', type=str, default = [-4,1], nargs='+')
+    parser.add_argument("--validity_violation", action ='store', type=str, default = [-2,1], nargs='+')
     parser.add_argument("--majority_violation", action ='store', type=str, default = [-0.5,0.5], nargs='+')
     parser.add_argument("--correct_commit", action ='store', type=str, default = [1,-1], nargs='+')
     parser.add_argument("--additional_round_penalty", action ='store', type=str, default = [-0.03], nargs='+')
@@ -65,7 +68,7 @@ def initialize_parameters():
     ## NN Settings
     parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
-    parser.add_argument("--hidden_sizes", action ='store', type=str, default = (16,8), nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
+    parser.add_argument("--hidden_sizes", action ='store', type=str, default = (8,8), nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
     parser.add_argument("--activation", type=str, action='store', nargs='+', default = ["tanh"], help='Activation functions - tanh, relu, sigmoid')
     parser.add_argument("--output_activation", type=None, action='store', nargs='+', default = [None], help='')
     parser.add_argument("--use_bias", type=bool, action='store', nargs='+', default = [True], help='')
