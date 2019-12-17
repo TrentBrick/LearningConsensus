@@ -280,21 +280,6 @@ def giveReward(params, honest_parties, trajectory):
     #penalty for the number of rounds
     #num_rounds = len(trajectory[list(trajectory.keys())[0]]) # already iterating through the 
 
-    # if they started by committing, then punish: 
-    # a more handholding version would be to encourage them to send the first round. 
-    '''no_send_true_value_first_penalty=np.array([0,0]) # may be able to remove this later. 
-    #default if they did nothing wrong. 
-    for key, trajectory_rounds in trajectory.items(): # going through the keys and their list of state, action, action prob pairs
-        if 'Byz-False' in key: #only getting honest
-            if honest_can_send_either_value==False: # make the string be init rather than a value. 
-                string_to_check = 'init'
-            else: 
-                string_to_check = str(trajectory_rounds[0][1][0])
-            if 'send_to_all-value_'+string_to_check != trajectory_rounds[0][2]: # getting the action from the first round
-                return dishonesty_violation + round_penalty_total, satisfied_constraints
-                #no_send_true_value_first_penalty=dont_send_value_first_round_penalty
-                #break'''
-
     com_values = []
     starting_values = []
     for h in honest_parties:

@@ -30,7 +30,7 @@ def initialize_parameters():
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [500], help='number of epochs')
     parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [300], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [10], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [500], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -40,7 +40,7 @@ def initialize_parameters():
     
     parser.add_argument("--honest_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
     parser.add_argument("--byz_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
-    parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.98], help='rate at which the temperature anneals per epoch')
+    parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.985], help='rate at which the temperature anneals per epoch')
     parser.add_argument("--temp_fix_point", type=float, action='store', nargs='+', default = [1.0], help='point at which temperature will stop annealing or if heat jumps are on, the point at which the temperature will bounce back to its starting point')
     parser.add_argument("--honest_can_send_either_value", type=bool, action='store', nargs='+', default = [False], help='can the honest agents send only their init value or other values also?')
     parser.add_argument("--use_heat_jumps", type=bool, action='store', nargs='+', default = [False], help='when it hits the temp fix point, increase the temp back to the starting temp')
@@ -68,7 +68,7 @@ def initialize_parameters():
     ## NN Settings
     parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
-    parser.add_argument("--hidden_sizes", action ='store', type=str, default = (8,8), nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
+    parser.add_argument("--hidden_sizes", action ='store', type=str, default = (8,16), nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
     parser.add_argument("--activation", type=str, action='store', nargs='+', default = ["tanh"], help='Activation functions - tanh, relu, sigmoid')
     parser.add_argument("--output_activation", type=None, action='store', nargs='+', default = [None], help='')
     parser.add_argument("--use_bias", type=bool, action='store', nargs='+', default = [True], help='')
