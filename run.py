@@ -58,13 +58,18 @@ def initialize_parameters():
     parser.add_argument("--save_freq", type=int, action='store', nargs='+', default = [10], help='')
 
     ## Penalties for rewards
-    parser.add_argument("--send_all_first_round_reward", action ='store', type=str, default = [0.3], nargs='+')
-    parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
-    parser.add_argument("--validity_violation", action ='store', type=str, default = [-2,1], nargs='+')
-    parser.add_argument("--majority_violation", action ='store', type=str, default = [-0.5,0.5], nargs='+')
-    parser.add_argument("--correct_commit", action ='store', type=str, default = [1,-1], nargs='+')
-    parser.add_argument("--additional_round_penalty", action ='store', type=str, default = [-0.03], nargs='+')
+    parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.3], nargs='+')
+    parser.add_argument("--consistency_violation", action ='store', type=float, default = [-1.0], nargs='+', help='from the perspective of the honest. The inverse is applied to the Byzantine')
+    parser.add_argument("--validity_violation", action ='store', type=float, default = [-1.0], nargs='+')
+    parser.add_argument("--majority_violation", action ='store', type=float, default = [-0.5], nargs='+')
+    parser.add_argument("--correct_commit", action ='store', type=float, default = [1], nargs='+')
+    parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.03], nargs='+')
 
+    #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
+    #parser.add_argument("--validity_violation", action ='store', type=str, default = [-1,1], nargs='+')
+    #parser.add_argument("--majority_violation", action ='store', type=str, default = [-0.5,0.5], nargs='+')
+    #parser.add_argument("--correct_commit", action ='store', type=str, default = [1,-1], nargs='+')
+    
     ## NN Settings
     parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
@@ -80,10 +85,10 @@ def initialize_parameters():
 
     args.hidden_sizes = buildTuple(args.hidden_sizes)
     args.commit_vals = buildTuple(args.commit_vals)
-    args.consistency_violation = buildNPArray(args.consistency_violation)
+    '''args.consistency_violation = buildNPArray(args.consistency_violation)
     args.validity_violation = buildNPArray(args.validity_violation)
     args.majority_violation = buildNPArray(args.majority_violation)
-    args.correct_commit = buildNPArray(args.correct_commit)
+    args.correct_commit = buildNPArray(args.correct_commit)'''
     # print(args)
 
     ## Create permutation matrix

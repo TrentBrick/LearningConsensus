@@ -7,6 +7,8 @@ from train_funcs import *
 import time 
 import matplotlib.pyplot as plt
 import pickle
+import os
+import json
 import datetime
 import argparse
 import itertools
@@ -16,6 +18,12 @@ def main(params):
 
     ################## Initialize parameters #################
     ##Get activation function from string input
+
+    # add the byzantine loss to each of the rewards and turn it into an array. 
+    for strin in [ 'consistency_violation', 'validity_violation' ,
+    'majority_violation', 'correct_commit']:
+        params[strin] = np.array( [params[strin], - params[strin]] )
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     params['device'] = device
     iters_per_epoch = params['iters_per_epoch']
@@ -25,9 +33,8 @@ def main(params):
         rl_algo = vpg
 
     date_time = str(datetime.datetime.now()).replace(' ', '_')
-    # used to save the policy and its outputs. 
-    experiment_name = params['exp_name']+"rand_seed-%s_scenario-%s_epochs-%s_iters_per_ep-%s_rl_algo-%s_time-%s" % (params['random_seed'], params['scenario'], 
-    params['epochs'], iters_per_epoch, params['rl_algo_wanted'], date_time )
+    # directory that will be used to save the policy and its outputs. 
+    exp_directory = params['directory'] + params['exp_name']+"_time-%s" % (date_time )
 
     activation = getActivation(params['activation'])
     output_activation = getActivation(params['output_activation'])
@@ -263,6 +270,16 @@ def main(params):
 
         curr_ep += 1
 
+
+    # make the directory
+    os.mkdir(exp_directory)
+    exp_directory = exp_directory+'/'
+
+    # write out all of the parameters used into a text file: 
+    with open(exp_directory+ 'params_used.txt', 'w') as file:
+
+        file.write(json.dumps(params, cls=NumpyEncoder))
+
     # plot the change in temperature over time. 
     # plot average honest dddwin rate over time. 
     save_labels = ['honest_wins', 'temperature', 'honest_loss', 'byz_loss', 
@@ -270,9 +287,9 @@ def main(params):
     for to_plot, label in zip([honest_wins_total, temperature_tracker, 
     honest_losses, byzantine_losses, honest_adv_loss_v, 
     honest_adv_loss_q, honest_rewards, byzantine_rewards],save_labels):
-        savePlot(params, to_plot, label, experiment_name)
+        savePlot(params, to_plot, label, exp_directory)
 
-    pickle.dump(total_trajectory_logs, open('runs/trajectory_logs-'+experiment_name+'.pickle', 'wb'))
+    pickle.dump(total_trajectory_logs, open(exp_directory+'trajectory_logs.pickle', 'wb'))
 
     save_names = ['honest_policy', 'byz_policy']
     save_models = [honest_policy, byz_policy]
@@ -283,7 +300,7 @@ def main(params):
         byz_v_function, byz_q_function]
 
     for m, n in zip(save_models, save_names):
-        torch.save(m, 'saved_models/'+experiment_name+n+'.torch')
+        torch.save(m, exp_directory+n+'.torch')
 
 
 # if the policy is better then save it. is overfitting a problem in RL?
@@ -316,7 +333,13 @@ def getByzantineActionSpace(params):
         #print('byz action to ind', )
     return byz_action_space, byz_action_space_size#, byz_action_to_ind
 
-
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, torch.device):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
 
 if __name__=='__main__':
     main()

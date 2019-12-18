@@ -226,14 +226,14 @@ def actionEffect(params, action, init_val, actor_prev_action_result, receiver_id
     else:
         return params['null_message_val']
 
-def savePlot(params, to_plot, label, experiment_name):
+def savePlot(params, to_plot, label, exp_dir):
     plt.figure()
     plt.plot(range(len(to_plot)), to_plot, label=label)
     plt.xlabel('epochs')
     plt.ylabel(label)
     plt.title(str(params['iters_per_epoch'])+' iters per epoch')
     plt.legend()
-    plt.gcf().savefig(params['directory']+label+experiment_name+'.png', dpi=200)
+    plt.gcf().savefig(exp_dir+label+'.png', dpi=200)
 
 def initStatesandAgents(params, honest_policy, byz_policy):
     
