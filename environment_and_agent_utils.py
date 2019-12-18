@@ -167,25 +167,12 @@ class Agent:
         return self.action, action_logprob, action_ind.numpy()[0]
             
 def updateStates(params, agent_list):
-    #look at all agent actions and update the state of each to accomodate actions
-    #print('agent list', agent_list)
-    for reciever in agent_list:
-        #print('reciever state going into the update', reciever.state)
-        new_state = [reciever.initVal] # keep track of the agent's initial value, 
-        #want to show to the NN each time
-        actor_ind = 1 # this is always relative to the reciever. 
-        for actor in agent_list:
-            if actor == reciever: # check if agent committed. 
-                continue
-            # dont need to check if committed a value as already will prevent 
-            # from taking any actions other than no send.
-            new_state.append( actionEffect(params, actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
-            actor_ind +=1
-        reciever.state = new_state
+
+    # all actions are placed. agent sends what they recieved in the last round along withteir current messages. 
 
     # this internally resolves all of the agents and sets their new state. 
     # Now if PKI I need to add on to each state the states the other agents recieved
-    if params['use_PKI']:
+    if params['use_PKI']: # ordering looks like: [init val, agent 1 val, agent 2 val ..., tuple of their previous values]
         list_of_new_states = [] # need to get new states for all before updating them
         for reciever in agent_list:
             new_state = [reciever.initVal] # get the current state that has been set. 
@@ -194,13 +181,31 @@ def updateStates(params, agent_list):
                 if actor == reciever: # check if agent committed. 
                     continue
                 
-                new_state.append(reciever.state[actor_ind]) # appending what we already have
-                new_state += actor.state[1:]
+                actor_action_consequence = actionEffect(params, actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID)
+                new_state.append(actor_action_consequence) # appending what we already have
+                new_state += actor.state[1:(len(agent_list)-1)] # getting the states from the previous period. 
                 actor_ind +=1 # relative indexing. 
             list_of_new_states.append(new_state)
         
         for i, reciever in enumerate(agent_list): # actually update the states of each
             reciever.state = list_of_new_states[i] 
+
+    else: 
+        #look at all agent actions and update the state of each to accomodate actions
+        #print('agent list', agent_list)
+        for reciever in agent_list:
+            #print('reciever state going into the update', reciever.state)
+            new_state = [reciever.initVal] # keep track of the agent's initial value, 
+            #want to show to the NN each time
+            actor_ind = 1 # this is always relative to the reciever. We want indexes 1 and then 2 from their state space
+            for actor in agent_list:
+                if actor == reciever: # check if agent committed. 
+                    continue
+                # dont need to check if committed a value as already will prevent 
+                # from taking any actions other than no send.
+                new_state.append( actionEffect(params, actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
+                actor_ind +=1
+            reciever.state = new_state
                 
 
 def actionEffect(params, action, init_val, actor_prev_action_result, receiver_id):
@@ -303,7 +308,7 @@ def giveReward(params, honest_parties, trajectory):
     # want them to commit to the majority init value: 
     if params['num_byzantine']==0:
         majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
-        if com_values[0] != majority_init_value: # as already made sure they were all the same value. 
+        if com_values[0] != int(majority_init_value): # as already made sure they were all the same value. 
             return params['majority_violation'], satisfied_constraints
 
     satisfied_constraints=True

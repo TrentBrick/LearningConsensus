@@ -4,6 +4,7 @@ from sklearn.model_selection import ParameterGrid
 from test import *
 import torch
 import main
+import pandas as pd
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -23,14 +24,14 @@ def initialize_parameters():
 
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
-    parser.add_argument("-commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
+    parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [3], help='overall number of agents in simulation')
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [0], help='overall number of byzantine agents in simulation')
 
     # Training Settings
-    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [500], help='number of epochs')
-    parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [300], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [500], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
+    parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [1000], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -60,8 +61,8 @@ def initialize_parameters():
     ## Penalties for rewards
     parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.3], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=float, default = [-1.0], nargs='+', help='from the perspective of the honest. The inverse is applied to the Byzantine')
-    parser.add_argument("--validity_violation", action ='store', type=float, default = [-1.0], nargs='+')
-    parser.add_argument("--majority_violation", action ='store', type=float, default = [-0.5], nargs='+')
+    parser.add_argument("--validity_violation", action ='store', type=float, default = [-2.0], nargs='+')
+    parser.add_argument("--majority_violation", action ='store', type=float, default = [-1.0], nargs='+')
     parser.add_argument("--correct_commit", action ='store', type=float, default = [1], nargs='+')
     parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.03], nargs='+')
 
@@ -98,10 +99,28 @@ def initialize_parameters():
     for v in arg_dict.values():
         tot_combos *= len(v)
     pg = ParameterGrid(arg_dict)
+
+    res = pd.DataFrame.from_dict(pg)
+    res['timestamp'] = np.zeros(res.shape[0])
+    res['last_honest_win'] = np.zeros(res.shape[0])
+    res['honest_50'] =np.zeros(res.shape[0])
+    res['honest_75']=np.zeros(res.shape[0])
+    res['honest_90']=np.zeros(res.shape[0])
+
     for i in range(tot_combos):
-        print(' ====================== Running param combo ', i, '/', tot_combos, '======================')
+        print(' ====================== Running param combo ', i+1, '/', tot_combos, '======================')
         print('combo of params is:', pg[i])
-        main.main(pg[i])  
+        
+        #receiving back results to store so that multiple iterations can be compared:
+        exp_dir, timestamp, last_honest_win, honest_90, honest_75, honest_50 = main.main(pg[i])  
+        res.loc[i, 'timestamp'] = timestamp
+        res.loc[i, 'last_honest_win'] = last_honest_win
+        res.loc[i, 'honest_50'] = honest_50
+        res.loc[i, 'honest_75'] = honest_75
+        res.loc[i, 'honest_90'] = honest_90
+    
+        res.to_csv(exp_dir + "ParamCombos.csv")
+
 
 def buildTuple(argument):
     count = 0

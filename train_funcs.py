@@ -47,8 +47,8 @@ def run_iters(params, honest_curr_temperature,
                     single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, agent.state, action, action_logprob, action_ind) ]
 
             # resolve the new states: 
-            for agent in agent_list: 
-                updateStates(params, agent_list)
+            #for agent in agent_list: 
+            updateStates(params, agent_list)
 
             # keep making more actions, storing all 
             # of them along with the states and rewards

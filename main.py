@@ -19,6 +19,9 @@ def main(params):
     ################## Initialize parameters #################
     ##Get activation function from string input
 
+    # set the random seeds: 
+    torch.manual_seed(params['random_seed'])
+    np.random.seed(params['random_seed'])
     # add the byzantine loss to each of the rewards and turn it into an array. 
     for strin in [ 'consistency_violation', 'validity_violation' ,
     'majority_violation', 'correct_commit']:
@@ -167,7 +170,7 @@ def main(params):
                     adv_loss.backward()
                     adv_optimizers[ind].step()
 
-        if curr_ep % params['byz_honest_train_ratio']!=0:
+        if params['num_byzantine']!=0 and curr_ep % params['byz_honest_train_ratio']!=0:
             # freeze the weights of the honest
             honest_policy.eval()
             byz_policy.train()
@@ -302,6 +305,8 @@ def main(params):
     for m, n in zip(save_models, save_names):
         torch.save(m, exp_directory+n+'.torch')
 
+    # returning things that can be stored to show the results over multiple iterations
+    return exp_directory, date_time, honest_wins_total[-1], np.argmin(honest_wins_total>0.90), np.argmin(honest_wins_total>0.75), np.argmin(honest_wins_total>0.50)
 
 # if the policy is better then save it. is overfitting a problem in RL?
 def getActivation(activation_string):

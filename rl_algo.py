@@ -41,17 +41,19 @@ use_vpg=False ):#, honest_action_to_ind, byz_action_to_ind ):
 
                     for round_ind in reversed(range(len(trajectory_rounds))): 
                         roundd = trajectory_rounds[round_ind]
-                        agent_action_ind = roundd[4]
-                        log_prob = roundd[3]
-                        agent_round_state = roundd[1]
-                        agent_round_action = roundd[2]
-                        if log_prob is None: 
+
+                        if roundd[3] is None: # this is log prob. it will only be true when this agent has already committed. 
                             #print('log prob is none', log_prob, 'round ind is:', round_ind)
                             #print('trajectory rounds are: ', trajectory_rounds)
                             continue
-                        # (round_counter, state, action, action_logprob)
-                        # rewards to go are all the same!
 
+                        # (round_counter, state, action, action_logprob, action index)
+                        # rewards to go are cumulative!
+                        agent_round_state = roundd[1]
+                        agent_round_action = roundd[2]
+                        log_prob = roundd[3]
+                        agent_action_ind = roundd[4]
+                        
                         #for byzantine need to ignore its very last action as the other agents already both decided to commit!
                         if isByz and round_ind >= len(trajectory_rounds)-1:
                             continue
