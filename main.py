@@ -292,9 +292,9 @@ def main(params):
     honest_adv_loss_q, honest_rewards, byzantine_rewards],save_labels):
         savePlot(params, to_plot, label, exp_directory)
 
-    pickle.dump(total_trajectory_logs, open(exp_directory+'trajectory_logs.pickle', 'wb'))
+    #pickle.dump(total_trajectory_logs, open(exp_directory+'trajectory_logs.pickle', 'wb'))
 
-    save_names = ['honest_policy', 'byz_policy']
+    '''save_names = ['honest_policy', 'byz_policy']
     save_models = [honest_policy, byz_policy]
     if params['use_vpg']:
         save_names += ['honest_policy_v', 'honest_policy_q', 
@@ -303,10 +303,10 @@ def main(params):
         byz_v_function, byz_q_function]
 
     for m, n in zip(save_models, save_names):
-        torch.save(m, exp_directory+n+'.torch')
+        torch.save(m, exp_directory+n+'.torch')'''
 
     # returning things that can be stored to show the results over multiple iterations
-    return exp_directory, date_time, honest_wins_total[-1], np.argmin(honest_wins_total>0.90), np.argmin(honest_wins_total>0.75), np.argmin(honest_wins_total>0.50)
+    return exp_directory, date_time, honest_wins_total[-1], np.argmin(np.asarray(honest_wins_total)>0.90), np.argmin(np.asarray(honest_wins_total)>0.75), np.argmin(np.asarray(honest_wins_total)>0.50)
 
 # if the policy is better then save it. is overfitting a problem in RL?
 def getActivation(activation_string):
