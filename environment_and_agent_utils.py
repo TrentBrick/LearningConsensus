@@ -136,7 +136,6 @@ class Agent:
         self.committed_value = False
 
     def chooseAction(self, oneHotStateMapper, temperature, device, forceCommit=False):
-   
         # look at the current state and decide what action to take. 
         oh = toOneHotState(self.state, oneHotStateMapper, device) # each column is one of the states. 
         #making a decision:

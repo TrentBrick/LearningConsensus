@@ -280,7 +280,6 @@ def main(params):
 
     # write out all of the parameters used into a text file: 
     with open(exp_directory+ 'params_used.txt', 'w') as file:
-
         file.write(json.dumps(params, cls=NumpyEncoder))
 
     # plot the change in temperature over time. 

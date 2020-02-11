@@ -110,7 +110,17 @@ def initialize_parameters():
     for i in range(tot_combos):
         print(' ====================== Running param combo ', i+1, '/', tot_combos, '======================')
         print('combo of params is:', pg[i])
+
+        env = consensus_env(pg[i])
+        # should I be using gym.make here??
+
+        # TODO: have all of these args reference the correct things... .
+        ppo(lambda : gym.make(env), actor_critic=core.MLPActorCritic,
+            ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
+            seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+            logger_kwargs=logger_kwargs)
         
+        '''
         #receiving back results to store so that multiple iterations can be compared:
         exp_dir, timestamp, last_honest_win, honest_90, honest_75, honest_50 = main.main(pg[i])  
         res.loc[i, 'timestamp'] = timestamp
@@ -119,7 +129,7 @@ def initialize_parameters():
         res.loc[i, 'honest_75'] = honest_75
         res.loc[i, 'honest_90'] = honest_90
     
-        res.to_csv(exp_dir + "ParamCombos.csv")
+        res.to_csv(exp_dir + "ParamCombos.csv")'''
 
 
 def buildTuple(argument):

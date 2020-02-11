@@ -14,6 +14,9 @@ class PPOBuffer:
     A buffer for storing trajectories experienced by a PPO agent interacting
     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
     for calculating the advantages of state-action pairs.
+    size: the number of rounds in the trajectory
+    obs_dim: dimension of obs
+    act_dim: actions
     """
 
     def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
@@ -34,8 +37,8 @@ class PPOBuffer:
         assert self.ptr < self.max_size     # buffer has to have room so you can store
         self.obs_buf[self.ptr] = obs
         self.act_buf[self.ptr] = act
-        self.rew_buf[self.ptr] = rew
-        self.val_buf[self.ptr] = val
+        self.rew_buf[self.ptr] = rew # the actual reward recieved. 
+        self.val_buf[self.ptr] = val # the value function estimate. 
         self.logp_buf[self.ptr] = logp
         self.ptr += 1
 
@@ -56,17 +59,18 @@ class PPOBuffer:
         """
 
         path_slice = slice(self.path_start_idx, self.ptr)
-        rews = np.append(self.rew_buf[path_slice], last_val)
+        rews = np.append(self.rew_buf[path_slice], last_val) # adding the very last value. 
         vals = np.append(self.val_buf[path_slice], last_val)
         
-        # the next two lines implement GAE-Lambda advantage calculation
+        # the next two lines implement GAE-Lambda advantage calculation.
+        # this is much more sophisticated than the basic advantage equation. 
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
         self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
         
         # the next line computes rewards-to-go, to be targets for the value function
         self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
         
-        self.path_start_idx = self.ptr
+        self.path_start_idx = self.ptr # making the new start point to add another new simulation in at the end!
 
     def get(self):
         """
@@ -74,7 +78,7 @@ class PPOBuffer:
         the buffer, with advantages appropriately normalized (shifted to have
         mean zero and std one). Also, resets some pointers in the buffer.
         """
-        assert self.ptr == self.max_size    # buffer has to be full before you can get
+        assert self.ptr == self.max_size    # buffer has to be full before you can get. what if it ends early???
         self.ptr, self.path_start_idx = 0, 0
         # the next two lines implement the advantage normalization trick
         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
@@ -82,8 +86,6 @@ class PPOBuffer:
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     adv=self.adv_buf, logp=self.logp_buf)
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
-
-
 
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
@@ -209,7 +211,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
 
-    # Create actor-critic module
+    # Create actor-critic module. # brains of each of the agents.
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
 
     # Sync params across processes
@@ -220,7 +222,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
     # Set up experience buffer
-    local_steps_per_epoch = int(steps_per_epoch / num_procs())
+    local_steps_per_epoch = int(steps_per_epoch / num_procs()) # how do local steps fill up the buffer??
     buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
 
     # Set up function for computing PPO policy loss
@@ -255,7 +257,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     logger.setup_pytorch_saver(ac)
 
     def update():
-        data = buf.get()
+        data = buf.get() # get a dictionary format of the logger with the values normalized. 
 
         pi_l_old, pi_info_old = compute_loss_pi(data)
         pi_l_old = pi_l_old.item()
@@ -296,10 +298,10 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
-        for t in range(local_steps_per_epoch):
+        for t in range(local_steps_per_epoch): # will keep looping and even restarting the environment until the end here. 
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-
-            next_o, r, d, _ = env.step(a)
+            # action, value calcs, log probs. 
+            next_o, r, d, _ = env.step(a) # reward and indicator for died. 
             ep_ret += r
             ep_len += 1
 
@@ -312,7 +314,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
             timeout = ep_len == max_ep_len
             terminal = d or timeout
-            epoch_ended = t==local_steps_per_epoch-1
+            epoch_ended = t==local_steps_per_epoch-1 #still dont get how the local steps work. 
 
             if terminal or epoch_ended:
                 if epoch_ended and not(terminal):
@@ -322,12 +324,11 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
                 else:
                     v = 0
-                buf.finish_path(v)
+                buf.finish_path(v) # tie off this path no matter what
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                o, ep_ret, ep_len = env.reset(), 0, 0
-
+                o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
 
         # Save model
         if (epoch % save_freq == 0) or (epoch == epochs-1):
