@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 from sklearn.model_selection import ParameterGrid
+import multiprocessing
 from test import *
 import torch
 import main
@@ -12,6 +13,7 @@ def initialize_parameters():
     parser.add_argument("--exp_name", type=str, action='store', nargs='+', default=["TestRun"], help="name of experiment")
     parser.add_argument("--directory", type=str, action='store', nargs='+', default = ["runs/"], help='directory to save results in')
     parser.add_argument("--random_seed", type=int, action='store', nargs='+', default = [27], help='seed to start the simulation from')
+    parser.add_argument("--ncores", type=int, action='store', nargs='+', default = [1], help='number of cores to use. if -1 then it uses all of them. ')
 
     parser.add_argument("--load_policy_honest", type=str, action='store', nargs='+', default=['None'], help='path to load in a pretrained policy for honest')
     parser.add_argument("--load_policy_byz", type=str, action='store', nargs='+', default=['None'], help='path to load in a pretrained policy for honest')
@@ -30,7 +32,7 @@ def initialize_parameters():
 
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
-    parser.add_argument("--iters_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
+    parser.add_argument("--rounds_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
     parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [1000], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
@@ -47,13 +49,12 @@ def initialize_parameters():
     parser.add_argument("--use_heat_jumps", type=bool, action='store', nargs='+', default = [False], help='when it hits the temp fix point, increase the temp back to the starting temp')
     
     parser.add_argument("--rl_algo_wanted", type=str, action='store', nargs='+', default = ['vpg'], help='')
-    parser.add_argument("--steps_per_epoch", type=int, action='store', nargs='+', default = [4000], help='')
-    parser.add_argument("--gamma", type=float, action='store', nargs='+', default = [0.999], help='')
+    parser.add_argument("--gamma", type=float, action='store', nargs='+', default = [0.99], help='')
+    parser.add_argument("--lam", type=float, action='store', nargs='+', default = [0.95], help='')
     parser.add_argument("--clip_ratio", type=float, action='store', nargs='+', default = [0.2], help='')
     parser.add_argument("--vf_lr", type=float, action='store', nargs='+', default = [0.001], help='')
     parser.add_argument("--train_policy_iters", type=int, action='store', nargs='+', default = [80], help='')
     parser.add_argument("--train_vf_iters", type=int, action='store', nargs='+', default = [80], help='')
-    parser.add_argument("--lam", type=float, action='store', nargs='+', default = [0.97], help='')
     parser.add_argument("--target_kl", type=float, action='store', nargs='+', default = [0.01], help='')
     # parser.add_argument("--logger_kwargs", type=dict(), action='store', nargs='+', default = [dict()], help='')
     parser.add_argument("--save_freq", type=int, action='store', nargs='+', default = [10], help='')
@@ -91,6 +92,9 @@ def initialize_parameters():
     args.majority_violation = buildNPArray(args.majority_violation)
     args.correct_commit = buildNPArray(args.correct_commit)'''
     # print(args)
+
+    if args.ncores == -1:
+        args.ncores = multiprocessing.cpu_count()
 
     ## Create permutation matrix
     arg_dict = vars(args)

@@ -29,7 +29,7 @@ def main(params):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     params['device'] = device
-    iters_per_epoch = params['iters_per_epoch']
+    rounds_per_epoch = params['rounds_per_epoch']
 
     # Set rl_algo
     if params['rl_algo_wanted']=='vpg':
@@ -243,7 +243,7 @@ def main(params):
 
         #honest_wins_total += honest_victory
         #byz_rewards = sum([ s[1] for s in satisfied_constraints ])
-        honest_wins_total.append(sum(honest_victory)/iters_per_epoch)
+        honest_wins_total.append(sum(honest_victory)/rounds_per_epoch)
         
         # get all of the relevant metrics. eg. loss.item()
 
@@ -253,16 +253,16 @@ def main(params):
             for k, v in curr_ep_trajectory_logs[-1].items():
                 print(k, v)
                 print('---------')
-            print('Hit the max round length %:', hit_max_round_len/iters_per_epoch)
+            print('Hit the max round length %:', hit_max_round_len/rounds_per_epoch)
             #print( 'Honest wins this epoch', sum(honest_victory), '=============')
-            print('Average round length', avg_round_len/iters_per_epoch)
-            print('Epoch Sum of Honest Rewards', epoch_honest_reward/iters_per_epoch)
-            print( 'Honest wins this epoch %', sum(honest_victory)/iters_per_epoch, '=============')
+            print('Average round length', avg_round_len/rounds_per_epoch)
+            print('Epoch Sum of Honest Rewards', epoch_honest_reward/rounds_per_epoch)
+            print( 'Honest wins this epoch %', sum(honest_victory)/rounds_per_epoch, '=============')
             print('Honest losses', honest_loss)
             if params['num_byzantine']!=0:
                 print( 'Byz losses', byz_loss)
-            #print( 'cum sum of honest wins', sum(honest_wins_total)*iters_per_epoch, '=============')
-            #print('as a percentage of all trajectories:', (sum(honest_wins_total)*iters_per_epoch)/ (curr_ep*iters_per_epoch))
+            #print( 'cum sum of honest wins', sum(honest_wins_total)*rounds_per_epoch, '=============')
+            #print('as a percentage of all trajectories:', (sum(honest_wins_total)*rounds_per_epoch)/ (curr_ep*rounds_per_epoch))
             print('Current Epoch is: ', curr_ep)
             print('Current Honest Temperature is:' , honest_curr_temperature, 'Byz Temp', byz_curr_temperature, '=======')
             if params['use_vpg']:

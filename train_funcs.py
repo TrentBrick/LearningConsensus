@@ -13,7 +13,7 @@ def run_iters(params, honest_curr_temperature,
     hit_max_round_len = 0
     avg_round_len = 0
 
-    for iter_in_ep in range(params['iters_per_epoch']):
+    for round_in_ep in range(params['rounds_per_epoch']):
         #run the environment. 
 
         single_run_trajectory_log = dict()
@@ -36,15 +36,15 @@ def run_iters(params, honest_curr_temperature,
                     action, action_logprob = agent.action, None
                 else:
                     if round_counter>params['max_round_len']: # force the honest agents to commit to a value. 
-                        action, action_logprob, action_ind = agent.chooseAction(oneHotStateMapper, curr_temperature, device, forceCommit=True)
+                        action, action_logprob = agent.chooseAction(oneHotStateMapper, curr_temperature, device, forceCommit=True)
                     else: 
-                        action, action_logprob, action_ind = agent.chooseAction(oneHotStateMapper, curr_temperature, device)
+                        action, action_logprob = agent.chooseAction(oneHotStateMapper, curr_temperature, device)
                 
                 # log the current state and action
                 try: 
-                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, agent.state, action, action_logprob, action_ind ))
+                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append( (round_counter, agent.state, action, action_logprob ))
                 except: 
-                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, agent.state, action, action_logprob, action_ind) ]
+                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = [ (round_counter, agent.state, action, action_logprob) ]
 
             # resolve the new states: 
             #for agent in agent_list: 
