@@ -118,10 +118,14 @@ def initialize_parameters():
         env = consensus_env(pg[i])
         # should I be using gym.make here??
 
-        # TODO: have all of these args reference the correct things... .
+        ##Fork 
+
+        mpi_fork(args.ncores);
+        # TODO: CHANGE core.MLPActorCritic when NN hidden layers are changed
+        ## What is 
         ppo(lambda : gym.make(env), actor_critic=core.MLPActorCritic,
-            ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
-            seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+            ac_kwargs=dict(hidden_sizes=params['hidden_sizes']), gamma=params['gamma'], 
+            seed=params['random_seed'], steps_per_epoch=params['iterations'], epochs=params['epochs'],
             logger_kwargs=logger_kwargs)
         
         '''

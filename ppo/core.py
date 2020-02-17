@@ -107,9 +107,9 @@ class MLPCritic(nn.Module):
 
 class MLPActorCritic(nn.Module):
 
-
+    #### Changed hidden sizes to 16,8
     def __init__(self, observation_space, action_space, 
-                 hidden_sizes=(64,64), activation=nn.Tanh):
+                 hidden_sizes=(16,8), activation=nn.Tanh):
         super().__init__()
 
         obs_dim = observation_space.shape[0]

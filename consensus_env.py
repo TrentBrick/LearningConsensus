@@ -4,6 +4,7 @@ from nn import *
 import matplotlib.pyplot as plt
 import itertools
 from collections import OrderedDict
+from actions import getActionSpace, actionEffect
 
 # This file follows the OpenAI Gym environment API to interface with its RL algorithms
 
@@ -31,17 +32,7 @@ class Agent:
         self.isByzantine = isByzantine
         self.agentID = agentID
         self.brain = pi
-        self.actionSpace = getActionSpace(params, isByzantine, byzantine_inds, can_send_either_value=params['honest_can_send_either_value']) 
-        
-        commitDict = {}
-        for ind, a in enumerate(self.actionSpace):
-            if 'commit' in a: 
-                commitDict[ind] = int(a.split('_')[1]) # gets the commit value associated with this. 
-            else:
-                commitDict[ind] = params['null_message_val']
-
-        self.commitDict = commitDict
-
+        self.actionSpace = getActionSpace(params, isByzantine, byzantine_inds) 
         self.actionDims = len(self.actionSpace)
 
         if params['use_PKI']: 
@@ -78,7 +69,7 @@ class Agent:
         
         self.initState = torch.tensor(initState).float()
         self.state = self.initState
-        self.committed_value = params['null_message_val']
+        self.committed_value = False
 
     def chooseAction(self, oneHotStateMapper, temperature, device, forceCommit=False):
         # look at the current state and decide what action to take. 
@@ -92,10 +83,14 @@ class Agent:
         action_logprob = real_logprobs[action_ind]
         self.action = action_ind
         self.actionStr = self.actionSpace[action_ind]
-        self.committed_value = self.commitDict[action_ind]
+
+        ###If commit in agents action space, then commit
+        if 'commit' in actionStr:
+            self.committed_value = int(self.action.split('_')[1])
+            
         return self.action, action_logprob
             
-def updateStates(params, agent_list):
+def updateStates(params, agent_list, honest_list):
 
     # all actions are placed. agent sends what they recieved in the last round along withteir current messages. 
     # this internally resolves all of the agents and sets their new state. 
@@ -134,29 +129,76 @@ def updateStates(params, agent_list):
                 new_state.append( actionEffect(params, actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
                 actor_ind +=1
             reciever.state = new_state
-                
-def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver_id):
-    # return the effects of a particular action
 
-    if actionStr == 'no_send':
-        return params['null_message_val']
+    # calculate the rewards: 
+    rewards, sim_done = giveRewards(params, agent_list, honest_list)
 
-    elif 'commit' in actionStr: # keep returning the last state that the agent sent
-        return actor_prev_action_result
+    return reward, sim_done
 
-    elif 'to_all' in actionStr:
-        if params['honest_can_send_either_value']==False:
-            if 'init' in actionStr: # will only be true if honests not allowed to send a different value
-                return init_val
+def giveRewards(params, agent_list, honest_list):
+    # checks to see if the honest parties have obtained both
+    # consistency and validity in addition to any other rewards
+
+    rewards = np.zeros((len(agent_list)))
+    sim_done = False
+    # first check if all honest have committed and give the final reward if so
+    all_committed = True
+    comm_values = []
+    starting_values = [] # needed to check validity
+    for h in honest_list: 
+        if h.committed_value is bool:
+            all_committed = False
+            break
         else: 
-            return int(actionStr.split('_')[-1])
+            comm_values.append(h.committed_value)
+            starting_values.append(h.initVal)
     
-    elif 'agent-'+str(receiver_id) in actionStr:
-        # getting the first value of this. 
-        return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+    if all_committed: 
+        sim_done = True
+        honest_comm_reward, satisfied_constraints = getCommReward(params, comm_values, starting_values)
+        for i, a in enumerate(agent_list):
+            if not a.isByz:
+                rewards[i] += honest_comm_reward
+            else: 
+                rewards[i] -= honest_comm_reward
 
-    else:
-        return params['null_message_val']
+        return rewards, sim_done
+
+    for i, a in enumerate(agent_list): 
+        # reward for sending to all in the first round
+        if a.isByz == False and a.buffer.ptr == 0 and 'send_to_all-' in a.action:
+            rewards[i] += params['send_all_first_round_reward']
+
+        # round length penalties
+        if not a.isByz:
+            rewards_to_go += params['additional_round_penalty']
+        elif a.isByz: 
+            rewards_to_go -= params['additional_round_penalty']
+
+    return rewards, sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
+
+def getCommReward(params, comm_values, starting_values):
+
+    satisfied_constraints = False
+
+    if len(set(comm_values)) !=1:
+        return params['consistency_violation'], satisfied_constraints
+
+    # checking validity
+    if len(set(starting_values)) ==1:
+        # if they are all the same and they havent 
+        # agreed on the same value, then return -1
+        if starting_values != comm_values:   
+            return params['validity_violation'], satisfied_constraints
+
+    # want them to commit to the majority init value: 
+    if params['num_byzantine']==0:
+        majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
+        if comm_values[0] != int(majority_init_value): # as already made sure they were all the same value. 
+            return params['majority_violation'], satisfied_constraints
+
+    satisfied_constraints=True
+    return params['correct_commit'], satisfied_constraints
 
 class ConsensusEnv:
     def __init__(params):
@@ -276,21 +318,21 @@ class ConsensusEnv:
                     curr_temperature = honest_curr_temperature
 
                 # TODO: need to return a value along with the action taken!!! 
-
                 if type(agent.committed_value) is int: # dont change to True! Either it is False or a real value. 
                     a, logp, v = agent.action, None, None
-                
                 else:
                     a, logp, v = agent.chooseAction(oneHotStateMapper, curr_temperature, device)
                 
-                # update the environment for each agent and calculate the reward here. 
-                r, d = updateState(self.params, self.agent_list)
+            # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
+            rewards, sim_done = updateStates(self.params, self.agent_list, self.honest_list)
 
-                agent.buffer.store(o, a, r, v, logp)
+            for ind, agent in enumerate(self.agent_list): 
+
+                agent.buffer.store(o, a, rewards[ind], v, logp)
 
                 ep_len += 1
-                timeout = ep_len == max_ep_len self.params['max_round_len']
-                terminal = d or timeout
+                timeout = ep_len == self.params['max_round_len']
+                terminal = sim_done or timeout
                 epoch_ended = total_ep_rounds==agent.buffer.obs_buf.shape[0] -1
 
                 if terminal or epoch_ended:
@@ -307,11 +349,12 @@ class ConsensusEnv:
                         # only save EpRet / EpLen if trajectory finished
                     #    logger.store(EpRet=ep_ret, EpLen=ep_len)
                     #o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
-                    termination_list.append(1)
+                    
+                    #termination_list.append(1)
 
-        end_sim =False
+        '''end_sim =False
         if sum(termination_list) == num_agents or honestPartiesCommit(honest_list):
-            end_sim=True
+            end_sim=True'''
 
         return v, end_sim
 

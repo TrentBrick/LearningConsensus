@@ -7,6 +7,7 @@ import spinup.algos.pytorch.ppo.core as core
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
+# TODO: Import one hot state mapper
 
 
 
@@ -132,7 +133,10 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Instantiate environment
     env = env_fn()
-    obs_dim = env.observation_space.shape
+    ### Observation dimensions 
+    obs_dim = oneHotStateMapper
+    # obs_dim = env.observation_space.shape
+    # TODO: Change action space of each agent 
     act_dim = env.action_space.shape
 
     # Create actor-critic module. # brains of each of the agents.
@@ -181,40 +185,66 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     logger.setup_pytorch_saver(ac)
 
     def update():
-        data = buf.get() # get a dictionary format of the logger with the values normalized. 
 
-        pi_l_old, pi_info_old = compute_loss_pi(data)
-        pi_l_old = pi_l_old.item()
-        v_l_old = compute_loss_v(data).item()
+        for agent_type_list in [env.honest_list, env.byzantine_list]:
 
-        # Train policy with multiple steps of gradient descent
-        for i in range(train_pi_iters):
-            pi_optimizer.zero_grad()
-            loss_pi, pi_info = compute_loss_pi(data)
-            kl = mpi_avg(pi_info['kl'])
-            if kl > 1.5 * target_kl:
-                logger.log('Early stopping at step %d due to reaching max kl.'%i)
-                break
-            loss_pi.backward()
-            mpi_avg_grads(ac.pi)    # average grads across MPI processes
-            pi_optimizer.step()
+            pi_l_old_avg = 0
+            pi_info_old_avg = dict()
+            v_l_old_avg = 0
 
-        logger.store(StopIter=i)
+            for agent in agent_type_list: 
 
-        # Value function learning
-        for i in range(train_v_iters):
-            vf_optimizer.zero_grad()
-            loss_v = compute_loss_v(data)
-            loss_v.backward()
-            mpi_avg_grads(ac.v)    # average grads across MPI processes
-            vf_optimizer.step()
+                data = agent.buffer.get() # get a dictionary format of the logger with the values normalized. 
 
-        # Log changes from update
-        kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
-        logger.store(LossPi=pi_l_old, LossV=v_l_old,
-                     KL=kl, Entropy=ent, ClipFrac=cf,
-                     DeltaLossPi=(loss_pi.item() - pi_l_old),
-                     DeltaLossV=(loss_v.item() - v_l_old))
+                pi_l_old, pi_info_old = compute_loss_pi(data)
+                pi_l_old = pi_l_old.item()
+                v_l_old = compute_loss_v(data).item()
+
+                # add to the averages
+                v_l_old_avg += v_l_old
+                pi_l_old_avg += pi_l_old
+                if not pi_info_old_avg:
+                    pi_info_old_avg = pi_info_old.copy()
+                else: 
+                    for k in pi_info_old.keys():
+                        pi_info_old_avg[k] += pi_info_old[k]
+                    
+            # divide by number of agents: 
+            pi_l_old_avg /= len(agent_type_list)
+            v_l_old_avg /= len(agent_type_list)
+            for k in pi_info_old_avg.keys():
+                pi_info_old_avg[k] = pi_info_old_avg[k]/len(agent_type_list)
+            
+
+                # Train policy with multiple steps of gradient descent
+                for i in range(train_pi_iters):
+                    pi_optimizer.zero_grad()
+                    # NEED TO AVERAGE THESE HERE IN THIS LOOP
+                        loss_pi, pi_info = compute_loss_pi(data)
+                    kl = mpi_avg(pi_info['kl'])
+                    if kl > 1.5 * target_kl:
+                        logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                        break
+                    loss_pi.backward()
+                    mpi_avg_grads(ac.pi)    # average grads across MPI processes
+                    pi_optimizer.step()
+
+                logger.store(StopIter=i)
+
+                # Value function learning
+                for i in range(train_v_iters):
+                    vf_optimizer.zero_grad()
+                    loss_v = compute_loss_v(data)
+                    loss_v.backward()
+                    mpi_avg_grads(ac.v)    # average grads across MPI processes
+                    vf_optimizer.step()
+
+                # Log changes from update
+                kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
+                logger.store(LossPi=pi_l_old, LossV=v_l_old,
+                            KL=kl, Entropy=ent, ClipFrac=cf,
+                            DeltaLossPi=(loss_pi.item() - pi_l_old),
+                            DeltaLossV=(loss_v.item() - v_l_old))
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -224,8 +254,10 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch): # will keep looping and even restarting the environment until the end here. 
             
-            '''' not sure if I want the neural networks here in ppo. no I want the updates to happen within the agents themselves. '''
-            termination_list = env.step(ep_len, total_ep_rounds)
+            '''' not sure if I want the neural networks here in ppo. 
+            no I want the updates to happen within the agents themselves. '''
+            end_sim = env.step(ep_len, t) # episode length and then the total number of steps in the buffer. 
+            
             #a, v, logp = env.step(torch.as_tensor(o, dtype=torch.float32))
             # action, value calcs, log probs. 
             #next_o, r, d, _ = env.step(a) # reward and indicator for died. 
@@ -239,12 +271,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             
             # Update obs (critical!)
             #o = next_o
-
-            
             #terminal = d or timeout
-            timeout = ep_len == max_ep_len
-            epoch_ended = t==local_steps_per_epoch-1 #still dont get how the local steps work. 
-
+            #timeout = ep_len == max_ep_len
+            #epoch_ended = t==local_steps_per_epoch-1 
 
             ''' I need to have the done signal only be true if all the agents have committed. 
             when a single agent commmits I need to run everything below for its own buffer. 
@@ -263,7 +292,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len) '''
 
-            if honestPartiesCommit(honest_list):
+            if end_sim:
                 o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
 
         # TODO: get model save working. 
