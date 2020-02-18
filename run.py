@@ -6,6 +6,7 @@ from test import *
 import torch
 import main
 import pandas as pd
+import gym 
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -123,7 +124,7 @@ def initialize_parameters():
         mpi_fork(args.ncores);
         # TODO: CHANGE core.MLPActorCritic when NN hidden layers are changed
         ## What is 
-        ppo(lambda : gym.make(env), actor_critic=core.MLPActorCritic,
+        ppo(env, actor_critic=core.MLPActorCritic,
             ac_kwargs=dict(hidden_sizes=params['hidden_sizes']), gamma=params['gamma'], 
             seed=params['random_seed'], steps_per_epoch=params['iterations'], epochs=params['epochs'],
             logger_kwargs=logger_kwargs)

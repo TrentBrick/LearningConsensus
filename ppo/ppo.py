@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.autograd import Variable
 from torch.optim import Adam
 import gym
 import time
@@ -8,9 +9,6 @@ from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 # TODO: Import one hot state mapper
-
-
-
 
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
@@ -134,10 +132,11 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Instantiate environment
     env = env_fn()
     ### Observation dimensions 
-    obs_dim = oneHotStateMapper
+    obs_dim = env.oneHotStateMapper.shape()
     # obs_dim = env.observation_space.shape
-    # TODO: Change action space of each agent 
-    act_dim = env.action_space.shape
+    honest_act_dim = env.honest_oneHotActionMapper.shape()
+    byz_action_dim = env.byzantine_oneHotAvtionMapper.shape()
+    # act_dim = env.action_space.shape
 
     # Create actor-critic module. # brains of each of the agents.
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
@@ -152,7 +151,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs()) # how do local steps fill up the buffer??
     buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
-
+    
     # Set up function for computing PPO policy loss
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
@@ -215,36 +214,59 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             for k in pi_info_old_avg.keys():
                 pi_info_old_avg[k] = pi_info_old_avg[k]/len(agent_type_list)
             
+            # Train policy with multiple steps of gradient descent
+            for i in range(train_pi_iters):
+                pi_optimizer.zero_grad()
+                # NEED TO AVERAGE THESE HERE IN THIS LOOP
+                loss_pi_avg = Variable(torch.zeros(1), requires_grad=True)
+                pi_info_avg = dict()
+                for agent in agent_type_list:
+                    data = agent.buffer.get()
+                    loss_pi, pi_info = compute_loss_pi(data)
 
-                # Train policy with multiple steps of gradient descent
-                for i in range(train_pi_iters):
-                    pi_optimizer.zero_grad()
-                    # NEED TO AVERAGE THESE HERE IN THIS LOOP
-                        loss_pi, pi_info = compute_loss_pi(data)
-                    kl = mpi_avg(pi_info['kl'])
-                    if kl > 1.5 * target_kl:
-                        logger.log('Early stopping at step %d due to reaching max kl.'%i)
-                        break
-                    loss_pi.backward()
-                    mpi_avg_grads(ac.pi)    # average grads across MPI processes
-                    pi_optimizer.step()
+                    loss_pi_avg += loss_pi
 
-                logger.store(StopIter=i)
+                    if not pi_info_avg:
+                        pi_info_avg = pi_info.copy()
+                    else: 
+                        for k in pi_info.keys():
+                            pi_info_avg[k] += pi_info[k]
 
-                # Value function learning
-                for i in range(train_v_iters):
-                    vf_optimizer.zero_grad()
+                kl = mpi_avg(pi_info_avg['kl'])
+                if kl > 1.5 * target_kl:
+                    logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                    break
+
+                loss_pi_avg /= len(agent_type_list)
+                loss_pi_avg.backward()
+                # TODO: Get the average grads to refer to the correct neural network. 
+                mpi_avg_grads(ac.pi)    # average grads across MPI processes
+                pi_optimizer.step()
+
+            logger.store(StopIter=i)
+
+            # Value function learning
+            for i in range(train_v_iters):
+                vf_optimizer.zero_grad()
+                loss_v_avg = Variable(torch.zeros(1), requires_grad=True)
+                for agent in agent_type_list:
+                    data = agent.buffer.get()
                     loss_v = compute_loss_v(data)
-                    loss_v.backward()
-                    mpi_avg_grads(ac.v)    # average grads across MPI processes
-                    vf_optimizer.step()
+                    loss_v_avg+= loss_v
+                    # at this point reset the buffer!!
+                    agent.buffer.reset()
+                loss_v_avg /= len(agent_type_list)
 
-                # Log changes from update
-                kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
-                logger.store(LossPi=pi_l_old, LossV=v_l_old,
-                            KL=kl, Entropy=ent, ClipFrac=cf,
-                            DeltaLossPi=(loss_pi.item() - pi_l_old),
-                            DeltaLossV=(loss_v.item() - v_l_old))
+                loss_v_avg.backward()
+                mpi_avg_grads(ac.v)    # average grads across MPI processes
+                vf_optimizer.step()
+
+            # Log changes from update
+            kl, ent, cf = pi_info_avg['kl'], pi_info_old_avg['ent'], pi_info_avg['cf']
+            logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
+                        KL=kl, Entropy=ent, ClipFrac=cf,
+                        DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
+                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
 
     # Prepare for interaction with environment
     start_time = time.time()

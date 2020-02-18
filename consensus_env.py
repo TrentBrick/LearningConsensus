@@ -6,6 +6,8 @@ import itertools
 from collections import OrderedDict
 from actions import getActionSpace, actionEffect
 
+
+
 # This file follows the OpenAI Gym environment API to interface with its RL algorithms
 
 # need an actor critic with a .step also .reset and .render
@@ -200,8 +202,8 @@ def getCommReward(params, comm_values, starting_values):
     satisfied_constraints=True
     return params['correct_commit'], satisfied_constraints
 
-class ConsensusEnv:
-    def __init__(params):
+class ConsensusEnv():
+    def __init__(self, params):
         self.params = params 
 
         honest_action_space, honest_action_space_size = getHonestActionSpace(params)
@@ -213,9 +215,9 @@ class ConsensusEnv:
         honest_optimizer = torch.optim.Adam(honest_policy.parameters(), lr=params['learning_rate'])
         byz_optimizer = torch.optim.Adam(byz_policy.parameters(), lr=params['learning_rate'])
 
-        oneHotStateMapper = np.eye(len(params['commit_vals'])+1) # number of unique values that can be in the state. 
-        honest_oneHotActionMapper = np.eye(honest_action_space_size)
-        byz_oneHotActionMapper = np.eye(byz_action_space_size)
+        self.oneHotStateMapper = np.eye(len(params['commit_vals'])+1) # number of unique values that can be in the state. 
+        self.honest_oneHotActionMapper = np.eye(honest_action_space_size)
+        self.byz_oneHotActionMapper = np.eye(byz_action_space_size)
         ## Initialize vpg
         if params['rl_algo_wanted']=='vpg' and params['use_vpg']:
             adv_hidden_sizes = (16,8)
@@ -241,19 +243,21 @@ class ConsensusEnv:
                 net.train()
                 net.zero_grad()
 
-        if params['load_policy_honest'] != "None":
-        print("LOADING IN an honest policy, load_policy=True")
-        honest_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'.torch')
-        if params['use_vpg']:
-            honest_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_v'+'.torch')
-            honest_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_q'+'.torch')
-        if params['load_policy_byz'] != "None":
-            byz_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'.torch')
-            if params['use_vpg']: 
-                byz_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_v'+'.torch')
-                byz_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_q'+'.torch')
+        #### Code for loading in a policy ####
+        # if params['load_policy_honest'] != "None":
+        # print("LOADING IN an honest policy, load_policy=True")
+        # honest_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'.torch')
+        # if params['use_vpg']:
+        #     honest_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_v'+'.torch')
+        #     honest_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_honest']+'_q'+'.torch')
+        # if params['load_policy_byz'] != "None":
+        #     byz_policy = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'.torch')
+        #     if params['use_vpg']: 
+        #         byz_v_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_v'+'.torch')
+        #         byz_q_function = torch.load(params['LOAD_PATH_EXPERIMENT']+params['load_policy_byz']+'_q'+'.torch')
                 #encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, loss, curr_ep, best_eval_acc = loadpolicy(encoder_net, decoder_net,encoder_optimizer, decoder_optimizer, load_name)
 
+        ##############################################
         if params['train_honest']:
             honest_policy.train()
         else: 
@@ -266,18 +270,17 @@ class ConsensusEnv:
         honest_policy.zero_grad()
         byz_policy.zero_grad()
 
-        if params['rl_algo_wanted']=='vpg' and params['use_vpg']:
-            for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
-                net.train()
+        for net in [honest_v_function, honest_q_function, byz_v_function, byz_q_function]:
+            net.train()
 
         # TODO: if these are self then dont need to pass them into the class function. 
         self.agent_list, self.honest_list, self.byzantine_list = initStatesandAgents(self.params, self.honest_policy, self.byz_policy)
 
-    def reset():
+    def reset(self):
         self.agent_list, self.honest_list, self.byzantine_list = initStatesandAgents(self.params, self.honest_policy, self.byz_policy)
 
 
-    def initStatesandAgents(params, honest_policy, byz_policy):
+    def initStatesandAgents(self, params, honest_policy, byz_policy):
     
         # need to randomize to avoid honest players learning which is Byzantine
         # index of Byzantines
@@ -305,7 +308,7 @@ class ConsensusEnv:
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def step(ep_len, total_ep_rounds):
+    def step(self, ep_len, total_ep_rounds):
         # this step needs to iterate through all of the agents. it doesnt need to return
         # anything though as each agent has their own buffer. 
 
@@ -367,7 +370,8 @@ class ConsensusEnv:
 
                 # log the current state and action
 
-
+    def render(self,  mode='human', close=False):
+        print("This is a test of rendering the environment ")
 
 
 
@@ -441,13 +445,16 @@ class PPOBuffer:
         mean zero and std one). Also, resets some pointers in the buffer.
         """
         assert self.ptr == self.max_size    # buffer has to be full before you can get. what if it ends early???
-        self.ptr, self.path_start_idx = 0, 0
+        
         # the next two lines implement the advantage normalization trick
         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     adv=self.adv_buf, logp=self.logp_buf)
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
+
+    def reset(self):
+        self.ptr, self.path_start_idx = 0, 0
 
 if __name__=='__main__':
     print(torch.tensor([5,4,3,2]))
