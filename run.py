@@ -35,7 +35,8 @@ def initialize_parameters():
     parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [3], help='overall number of agents in simulation')
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [0], help='overall number of byzantine agents in simulation')
-
+    parser.add_arguemnt("--action_space", type=int, action='store', nargs='+', default=[0,2], help='actions that agent can take - default is send init value and commit to a value')
+    
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
     parser.add_argument("--rounds_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
@@ -123,7 +124,7 @@ def initialize_parameters():
         print(' ====================== Running param combo ', i+1, '/', tot_combos, '======================')
         print('combo of params is:', pg[i])
 
-        print('paramtere grid', pg)
+        print('parameter grid', pg)
 
         print(getActivation(pg[i]['activation']))
         print(pg[i])

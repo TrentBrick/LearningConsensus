@@ -333,6 +333,7 @@ class ConsensusEnv():
         self.honest_oneHotActionMapper = np.eye(honest_action_space_size)
         self.byz_oneHotActionMapper = np.eye(byz_action_space_size)
         
+        #TODO: Need to call these from params
         adv_hidden_sizes = (16,8)
         adv_learning_rate=0.003
         adv_activation= torch.relu
@@ -340,6 +341,7 @@ class ConsensusEnv():
         adv_use_bias = True
         adv_output_size = 1
         # currently byz and honest use the same network sizes and learning rates.
+        #TODO: shouldn't the value function take in the observation space?
         self.honest_v_function = BasicPolicy(adv_output_size, state_oh_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias)#.to(device)
         #honest_q_function = BasicPolicy(adv_output_size, state_oh_size+honest_action_space_size, adv_hidden_sizes, adv_activation, adv_output_activation, adv_use_bias).to(device)
         self.honest_v_function_optimizer = torch.optim.Adam(self.honest_v_function.parameters(), lr=adv_learning_rate)

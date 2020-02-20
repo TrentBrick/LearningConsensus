@@ -121,6 +121,8 @@ def ppo_algo(env, seed=0,
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
+    honest_logger = EpochLogger(**logger_kwargs)
+    # byzantine_logger = EpochLogger(**logger_kwargs)
     #logger = EpochLogger(**logger_kwargs)
     #logger.save_config(locals())
 
@@ -179,12 +181,19 @@ def ppo_algo(env, seed=0,
         return ((nn.v(obs) - ret)**2).mean()
 
     # Set up optimizers for policy and value function
-    #pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
-    #vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
+    # pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
+    # vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
+    honest_policy_optimizer = env.honest_optimizer
+    byzantine_policy_optimizer = env.byz_optimizer
+    honest_v_optimizer = env.honest_v_function_optimizer
+    byz_v_optimizer = env.byz_v_function_optimizer
 
     # Set up model saving
     # TODO: find a way to log both of the neural networks. 
     #logger.setup_pytorch_saver(env.honest_policy)
+    ###Idea - create two logger classes - let's just focus on building this out for honest now ###
+    honest_logger.setup_pytorch_saver(env.honest_policy)
+
 
     def update():
 
