@@ -10,7 +10,7 @@ from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 # TODO: Import one hot state mapper
 
-def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+def ppo_algo(env, seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10):
@@ -121,8 +121,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(**logger_kwargs)
-    logger.save_config(locals())
+    #logger = EpochLogger(**logger_kwargs)
+    #logger.save_config(locals())
 
     # Random seed
     seed += 10000 * proc_id()
@@ -130,34 +130,36 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     np.random.seed(seed)
 
     # Instantiate environment
-    env = env_fn()
+    #env = env_fn()
     ### Observation dimensions 
-    obs_dim = env.oneHotStateMapper.shape()
+    #obs_dim = env.oneHotStateMapper.shape()
     # obs_dim = env.observation_space.shape
-    honest_act_dim = env.honest_oneHotActionMapper.shape()
-    byz_action_dim = env.byzantine_oneHotAvtionMapper.shape()
+    #honest_act_dim = env.honest_oneHotActionMapper.shape()
+    #byz_action_dim = env.byzantine_oneHotActionMapper.shape()
     # act_dim = env.action_space.shape
 
     # Create actor-critic module. # brains of each of the agents.
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    #ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
 
     # Sync params across processes
-    sync_params(ac)
+    sync_params(env.honest_policy)
+    sync_params(env.byz_policy)
 
     # Count variables
-    var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.v])
-    logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
+    var_counts = tuple(core.count_vars(module) for module in [env.honest_policy, env.byz_policy, 
+                                                            env.honest_v_function, env.byz_v_function])
+    #logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs()) # how do local steps fill up the buffer??
-    buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    #buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
     
     # Set up function for computing PPO policy loss
-    def compute_loss_pi(data):
+    def compute_loss_pi(data, nn):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
         # Policy loss
-        pi, logp = ac.pi(obs, act)
+        pi, logp = nn.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
@@ -172,16 +174,17 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         return loss_pi, pi_info
 
     # Set up function for computing value loss
-    def compute_loss_v(data):
+    def compute_loss_v(data, nn):
         obs, ret = data['obs'], data['ret']
-        return ((ac.v(obs) - ret)**2).mean()
+        return ((nn.v(obs) - ret)**2).mean()
 
     # Set up optimizers for policy and value function
-    pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
-    vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
+    #pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
+    #vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
 
     # Set up model saving
-    logger.setup_pytorch_saver(ac)
+    # TODO: find a way to log both of the neural networks. 
+    #logger.setup_pytorch_saver(env.honest_policy)
 
     def update():
 
@@ -195,9 +198,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
                 data = agent.buffer.get() # get a dictionary format of the logger with the values normalized. 
 
-                pi_l_old, pi_info_old = compute_loss_pi(data)
+                pi_l_old, pi_info_old = compute_loss_pi(data, agent.brain)
                 pi_l_old = pi_l_old.item()
-                v_l_old = compute_loss_v(data).item()
+                v_l_old = compute_loss_v(data, agent.brain).item()
 
                 # add to the averages
                 v_l_old_avg += v_l_old
@@ -222,7 +225,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 pi_info_avg = dict()
                 for agent in agent_type_list:
                     data = agent.buffer.get()
-                    loss_pi, pi_info = compute_loss_pi(data)
+                    loss_pi, pi_info = compute_loss_pi(data, agent.brain)
 
                     loss_pi_avg += loss_pi
 
@@ -234,7 +237,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
                 kl = mpi_avg(pi_info_avg['kl'])
                 if kl > 1.5 * target_kl:
-                    logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                    #logger.log('Early stopping at step %d due to reaching max kl.'%i)
                     break
 
                 loss_pi_avg /= len(agent_type_list)
@@ -243,30 +246,44 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 mpi_avg_grads(ac.pi)    # average grads across MPI processes
                 pi_optimizer.step()
 
-            logger.store(StopIter=i)
+            #logger.store(StopIter=i)
 
             # Value function learning
             for i in range(train_v_iters):
-                vf_optimizer.zero_grad()
+                if agent_type_list[0].isByzantine: 
+                    env.byz_v_function_optimizer.zero_grad()
+                else: 
+                    env.honest_v_function_optimizer.zero_grad()
                 loss_v_avg = Variable(torch.zeros(1), requires_grad=True)
                 for agent in agent_type_list:
                     data = agent.buffer.get()
-                    loss_v = compute_loss_v(data)
+                    if agent.isByzantine:
+                        loss_v = compute_loss_v(data, env.byz_v_function)
+                    else: 
+                        loss_v = compute_loss_v(data, env.honest_v_function)
                     loss_v_avg+= loss_v
                     # at this point reset the buffer!!
                     agent.buffer.reset()
                 loss_v_avg /= len(agent_type_list)
 
                 loss_v_avg.backward()
-                mpi_avg_grads(ac.v)    # average grads across MPI processes
-                vf_optimizer.step()
+
+                if agent_type_list[0].isByzantine: 
+                    mpi_avg_grads(env.byz_v_function)
+                    env.byz_v_function_optimizer.step()
+                else: 
+                    mpi_avg_grads(env.honest_v_function)
+                    env.honest_v_function_optimizer.step()
+
+                #mpi_avg_grads(ac.v)    # average grads across MPI processes
+                #vf_optimizer.step()
 
             # Log changes from update
             kl, ent, cf = pi_info_avg['kl'], pi_info_old_avg['ent'], pi_info_avg['cf']
-            logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
+            '''logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
                         KL=kl, Entropy=ent, ClipFrac=cf,
                         DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
-                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
+                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))'''
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -326,7 +343,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         update()
 
         # Log info about epoch
-        logger.log_tabular('Epoch', epoch)
+        # TODO: get the logger to work
+        '''logger.log_tabular('Epoch', epoch)
         logger.log_tabular('EpRet', with_min_and_max=True)
         logger.log_tabular('EpLen', average_only=True)
         logger.log_tabular('VVals', with_min_and_max=True)
@@ -340,9 +358,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         logger.log_tabular('ClipFrac', average_only=True)
         logger.log_tabular('StopIter', average_only=True)
         logger.log_tabular('Time', time.time()-start_time)
-        logger.dump_tabular()
+        logger.dump_tabular()'''
 
-if __name__ == '__main__':
+'''if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
@@ -364,4 +382,4 @@ if __name__ == '__main__':
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-        logger_kwargs=logger_kwargs)
+        logger_kwargs=logger_kwargs)'''

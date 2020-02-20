@@ -2,11 +2,16 @@ import argparse
 import numpy as np
 from sklearn.model_selection import ParameterGrid
 import multiprocessing
-from test import *
+#from test import *
 import torch
-import main
+#import main
 import pandas as pd
-import gym 
+#import gym 
+import consensus_env
+import ppo_code.ppo as ppo
+from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
+from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
+
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -97,6 +102,8 @@ def initialize_parameters():
     if args.ncores == -1:
         args.ncores = multiprocessing.cpu_count()
 
+    #args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     ## Create permutation matrix
     arg_dict = vars(args)
     tot_combos = 1
@@ -116,18 +123,24 @@ def initialize_parameters():
         print(' ====================== Running param combo ', i+1, '/', tot_combos, '======================')
         print('combo of params is:', pg[i])
 
-        env = consensus_env(pg[i])
+        print('paramtere grid', pg)
+
+        print(getActivation(pg[i]['activation']))
+        print(pg[i])
+        pg[i]['activation'] = getActivation(pg[i]['activation'])
+        print(pg[i])
+        pg[i]['output_activation'] = getActivation(pg[i]['output_activation'])
+
+        env = consensus_env.ConsensusEnv(pg[i])
         # should I be using gym.make here??
 
         ##Fork 
-
-        mpi_fork(args.ncores);
+        mpi_fork(pg[i]['ncores'])
         # TODO: CHANGE core.MLPActorCritic when NN hidden layers are changed
-        ## What is 
-        ppo(env, actor_critic=core.MLPActorCritic,
-            ac_kwargs=dict(hidden_sizes=params['hidden_sizes']), gamma=params['gamma'], 
-            seed=params['random_seed'], steps_per_epoch=params['iterations'], epochs=params['epochs'],
-            logger_kwargs=logger_kwargs)
+        ppo.ppo_algo(env, gamma=pg[i]['gamma'], 
+            seed=pg[i]['random_seed'], steps_per_epoch=pg[i]['rounds_per_epoch'], 
+            epochs=pg[i]['epochs'])
+            #logger_kwargs=logger_kwargs)
         
         '''
         #receiving back results to store so that multiple iterations can be compared:
@@ -171,6 +184,20 @@ def buildNPArray(argument):
             values.append(np.array(curr_array))
             curr_array = []
     return values
+
+def getActivation(activation_string):
+    if activation_string is 'tanh':
+        return torch.tanh
+    if activation_string is 'relu':
+        return torch.relu
+    if activation_string is 'sigmoid':
+        return torch.sigmoid
+    if activation_string is 'hardtanh':
+        return torch.hardtanh
+    if activation_string is 'leakyrelu':
+        return torch.leakyrelu
+    else:
+        return None
 
 if __name__=='__main__':
     initialize_parameters()

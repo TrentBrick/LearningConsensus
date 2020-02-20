@@ -19,6 +19,9 @@ actionMap = {
     #   1. When running with actions correspondign to keys 1,2,3 - do run.py --actions[1,2,3]
 
 # *****
+
+
+
 def getActionSpace(params, isByzantine, byzantine_inds=None):
     action_list = params['action_list']
     action_space = []
@@ -42,7 +45,7 @@ def getCommitValues(params):
 
 def getSendAnyCommitVal(params):
     action_space = []
-    for (commit_val)
+    for (commit_val):
         action_space.append('send_to_all-value_'+str(commit_val))
 
 def getSendInitVal(params):
