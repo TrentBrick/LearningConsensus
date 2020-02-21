@@ -241,7 +241,7 @@ def updateStates(params, agent_list, honest_list):
     # calculate the rewards: 
     rewards, sim_done = giveRewards(params, agent_list, honest_list)
 
-    return reward, sim_done
+    return rewards, sim_done
 
 def giveRewards(params, agent_list, honest_list):
     # checks to see if the honest parties have obtained both
@@ -421,7 +421,7 @@ class ConsensusEnv():
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def step(self, ep_len, total_ep_rounds):
+    def step(self, ep_len, total_ep_rounds, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
         # anything though as each agent has their own buffer. 
 
@@ -461,7 +461,7 @@ class ConsensusEnv():
                         v = 0
                     agent.buffer.finish_path(v) # tie off this path no matter what
                     #TODO: fix the logger here. 
-                    #if terminal:
+                    # if terminal:
                         # only save EpRet / EpLen if trajectory finished
                     #    logger.store(EpRet=ep_ret, EpLen=ep_len)
                     #o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
@@ -471,7 +471,7 @@ class ConsensusEnv():
         '''end_sim =False
         if sum(termination_list) == num_agents or honestPartiesCommit(honest_list):
             end_sim=True'''
-
+        ### what v are we actually returning here?
         return v, end_sim
 
         # store in the buffer. 
