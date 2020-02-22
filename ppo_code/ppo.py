@@ -8,7 +8,6 @@ import spinup.algos.pytorch.ppo.core as core
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
-# TODO: Import one hot state mapper
 
 def ppo_algo(env, seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
@@ -121,6 +120,10 @@ def ppo_algo(env, seed=0,
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
+    honest_logger = EpochLogger(**logger_kwargs)
+    honest_logger.save_config(locals())
+    byzantine_logger = EpochLogger(**logger_kwargs)
+    byzantine_logger.save_config(locals())
     #logger = EpochLogger(**logger_kwargs)
     #logger.save_config(locals())
 
@@ -146,7 +149,7 @@ def ppo_algo(env, seed=0,
     sync_params(env.byz_policy)
 
     # Count variables
-    var_counts = tuple(core.count_vars(module) for module in [env.honest_policy, env.byz_policy, 
+    var_counts = tuple(core.count_vars(module) for   in [env.honest_policy, env.byz_policy, 
                                                             env.honest_v_function, env.byz_v_function])
     #logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
@@ -159,6 +162,7 @@ def ppo_algo(env, seed=0,
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
         # Policy loss
+        #TODO: neural network doesn't have .pi? how are we calculating policy and logprobs?
         pi, logp = nn.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
@@ -179,12 +183,19 @@ def ppo_algo(env, seed=0,
         return ((nn.v(obs) - ret)**2).mean()
 
     # Set up optimizers for policy and value function
-    #pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
-    #vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
+    # pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
+    # vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
+    honest_policy_optimizer = env.honest_optimizer
+    byzantine_policy_optimizer = env.byz_optimizer
+    honest_v_optimizer = env.honest_v_function_optimizer
+    byz_v_optimizer = env.byz_v_function_optimizer
 
     # Set up model saving
     # TODO: find a way to log both of the neural networks. 
-    #logger.setup_pytorch_saver(env.honest_policy)
+    ###Idea - create two logger classes - let's just focus on building this out for honest now ###
+    byzantine_logger.setup_pytorch_saver(env.byz_policy)
+    honest_logger.setup_pytorch_saver(env.honest_policy)
+
 
     def update():
 
@@ -193,6 +204,7 @@ def ppo_algo(env, seed=0,
             pi_l_old_avg = 0
             pi_info_old_avg = dict()
             v_l_old_avg = 0
+            updating_byzantine_network = agent_type_list[0].isByzantine
 
             for agent in agent_type_list: 
 
@@ -205,6 +217,7 @@ def ppo_algo(env, seed=0,
                 # add to the averages
                 v_l_old_avg += v_l_old
                 pi_l_old_avg += pi_l_old
+                #pi_info_old_avg hasn't been initialized, intantiate as copy of first policy returned
                 if not pi_info_old_avg:
                     pi_info_old_avg = pi_info_old.copy()
                 else: 
@@ -236,21 +249,33 @@ def ppo_algo(env, seed=0,
                             pi_info_avg[k] += pi_info[k]
 
                 kl = mpi_avg(pi_info_avg['kl'])
+
                 if kl > 1.5 * target_kl:
-                    #logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                    if updating_byzantine_network:
+                        byzantine_logger.log(('Early stopping at step %d due to reaching max kl.'%i)
+                    else:
+                        honest_logger.log('Early stopping at step %d due to reaching max kl.'%i)
                     break
 
                 loss_pi_avg /= len(agent_type_list)
                 loss_pi_avg.backward()
                 # TODO: Get the average grads to refer to the correct neural network. 
+                ### Idea - we may have to go into the utils and modify these functions to have byzantine and honest gradients   
                 mpi_avg_grads(ac.pi)    # average grads across MPI processes
-                pi_optimizer.step()
+                if updating_byzantine_network:
+                    env.byzantine_optimizer.step()
+                else:
+                    env.honest_optimizer.step()
 
             #logger.store(StopIter=i)
+            if updating_byzantine_network:
+                byzantine_logger.store(StopIter = i)
+            else:
+                honest_logger.store(StopIter = i)
 
             # Value function learning
             for i in range(train_v_iters):
-                if agent_type_list[0].isByzantine: 
+                if updating_byzantine_network: 
                     env.byz_v_function_optimizer.zero_grad()
                 else: 
                     env.honest_v_function_optimizer.zero_grad()
@@ -268,7 +293,7 @@ def ppo_algo(env, seed=0,
 
                 loss_v_avg.backward()
 
-                if agent_type_list[0].isByzantine: 
+                if updating_byzantine_network: 
                     mpi_avg_grads(env.byz_v_function)
                     env.byz_v_function_optimizer.step()
                 else: 
@@ -279,7 +304,17 @@ def ppo_algo(env, seed=0,
                 #vf_optimizer.step()
 
             # Log changes from update
-            kl, ent, cf = pi_info_avg['kl'], pi_info_old_avg['ent'], pi_info_avg['cf']
+            if updating_byzantine_network:
+                byzantine_logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
+                        KL=kl, Entropy=ent, ClipFrac=cf,
+                        DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
+                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
+            else:
+                honest_logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
+                        KL=kl, Entropy=ent, ClipFrac=cf,
+                        DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
+                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
+            # kl, ent, cf = pi_info_avg['kl'], pi_info_old_avg['ent'], pi_info_avg['cf']
             '''logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
                         KL=kl, Entropy=ent, ClipFrac=cf,
                         DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
@@ -295,7 +330,7 @@ def ppo_algo(env, seed=0,
             
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            end_sim = env.step(ep_len, t) # episode length and then the total number of steps in the buffer. 
+            v, end_sim = env.step(ep_len, t, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
             
             #a, v, logp = env.step(torch.as_tensor(o, dtype=torch.float32))
             # action, value calcs, log probs. 
@@ -344,21 +379,39 @@ def ppo_algo(env, seed=0,
 
         # Log info about epoch
         # TODO: get the logger to work
-        '''logger.log_tabular('Epoch', epoch)
-        logger.log_tabular('EpRet', with_min_and_max=True)
-        logger.log_tabular('EpLen', average_only=True)
-        logger.log_tabular('VVals', with_min_and_max=True)
-        logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
-        logger.log_tabular('LossPi', average_only=True)
-        logger.log_tabular('LossV', average_only=True)
-        logger.log_tabular('DeltaLossPi', average_only=True)
-        logger.log_tabular('DeltaLossV', average_only=True)
-        logger.log_tabular('Entropy', average_only=True)
-        logger.log_tabular('KL', average_only=True)
-        logger.log_tabular('ClipFrac', average_only=True)
-        logger.log_tabular('StopIter', average_only=True)
-        logger.log_tabular('Time', time.time()-start_time)
-        logger.dump_tabular()'''
+        
+        '''if updating_byzantine_network:
+            byzantine_logger.log_tabular('Epoch', epoch)
+            byzantine_logger.log_tabular('EpRet', with_min_and_max=True)
+            byzantine_logger.log_tabular('EpLen', average_only=True)
+            byzantine_logger.log_tabular('VVals', with_min_and_max=True)
+            byzantine_logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
+            byzantine_logger.log_tabular('LossPi', average_only=True)
+            byzantine_logger.log_tabular('LossV', average_only=True)
+            byzantine_logger.log_tabular('DeltaLossPi', average_only=True)
+            byzantine_logger.log_tabular('DeltaLossV', average_only=True)
+            byzantine_logger.log_tabular('Entropy', average_only=True)
+            byzantine_logger.log_tabular('KL', average_only=True)
+            byzantine_logger.log_tabular('ClipFrac', average_only=True)
+            byzantine_logger.log_tabular('StopIter', average_only=True)
+            byzantine_logger.log_tabular('Time', time.time()-start_time)
+            byzantine_logger.dump_tabular()
+        else:
+            honest_logger.log_tabular('Epoch', epoch)
+            honest_logger.log_tabular('EpRet', with_min_and_max=True)
+            honest_logger.log_tabular('EpLen', average_only=True)
+            honest_logger.log_tabular('VVals', with_min_and_max=True)
+            honest_logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
+            honest_logger.log_tabular('LossPi', average_only=True)
+            honest_logger.log_tabular('LossV', average_only=True)
+            honest_logger.log_tabular('DeltaLossPi', average_only=True)
+            honest_logger.log_tabular('DeltaLossV', average_only=True)
+            honest_logger.log_tabular('Entropy', average_only=True)
+            honest_logger.log_tabular('KL', average_only=True)
+            honest_logger.log_tabular('ClipFrac', average_only=True)
+            honest_logger.log_tabular('StopIter', average_only=True)
+            honest_logger.log_tabular('Time', time.time()-start_time)
+            honest_logger.dump_tabular()'''
 
 '''if __name__ == '__main__':
     import argparse

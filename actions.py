@@ -45,8 +45,9 @@ def getCommitValues(params):
 
 def getSendAnyCommitVal(params):
     action_space = []
-    for (commit_val):
+    for commit_val in params['commit_vals']:
         action_space.append('send_to_all-value_'+str(commit_val))
+    return action_space
 
 def getSendInitVal(params):
     action_space = ['send_to_all-value_init']
