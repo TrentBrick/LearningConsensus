@@ -139,7 +139,6 @@ class Agent:
         self.value_function = value_function
         self.actionSpace = getActionSpace(params, isByzantine, byzantine_inds) 
         self.actionDims = len(self.actionSpace)
-
         self.stateDims = len(params['commit_vals'])+1 # +1 for the null value. 
 
         '''if params['use_PKI']: 
@@ -322,7 +321,7 @@ class ConsensusEnv():
             state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
 
         print('neural net inits', honest_action_space_size, state_oh_size)
-        print('nerual net ativation', params['activation'])
+        print('neural net activation', params['activation'])
         self.honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
         self.byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
 
@@ -437,8 +436,8 @@ class ConsensusEnv():
             else:
                 a, logp, v = agent.chooseAction(self.oneHotStateMapper, curr_temperature)
                 
-            # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
-            rewards, sim_done = updateStates(self.params, self.agent_list, self.honest_list)
+        # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
+        rewards, sim_done = updateStates(self.params, self.agent_list, self.honest_list)
 
             for ind, agent in enumerate(self.agent_list): 
 

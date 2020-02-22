@@ -26,8 +26,8 @@ def initialize_parameters():
     parser.add_argument("--LOAD_PATH_EXPERIMENT", type=str, action='store', nargs='+', default = ['saved_models/'], help='Path to the saved policies')
     #parser.add_argument("--honest_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved honest')
     #parser.add_argument("--byz_policy_LOAD_PATH", type=str, action='store', nargs='+', default = [''], help='Path to the saved byzantine')
-    parser.add_argument("--train_honest", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the honest are not trained. ')
-    parser.add_argument("--train_byz", type=bool, action='store', nargs='+', default = [True], help='Can ensure that the byz are not trained. ')
+    parser.add_argument("--train_honest", type=buildBool, action='store', nargs='+', default = [True], help='Can ensure that the honest are not trained. ')
+    parser.add_argument("--train_byz", type=buildBool, action='store', nargs='+', default = [True], help='Can ensure that the byz are not trained. ')
     parser.add_argument("--byz_honest_train_ratio", type=int, action='store', nargs='+', default = [1], help='Ratio of epochs we train byzantine for 1 honest. A value of 1 means has no ratio training')
 
     # Environment Settings
@@ -43,16 +43,16 @@ def initialize_parameters():
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
-    parser.add_argument("--use_PKI", type=bool, action='store', nargs='+', default = [False], help='Use Public Key Infrastructure?')
-    parser.add_argument("--use_vpg", type=bool, action='store', nargs='+', default = [False], help='if False will use REINFORCE')
+    parser.add_argument("--use_PKI", type=buildBool, action='store', nargs='+', default = [False], help='Use Public Key Infrastructure?')
+    parser.add_argument("--use_vpg", type=buildBool, action='store', nargs='+', default = [False], help='if False will use REINFORCE')
     parser.add_argument("--vpg_epochs_ratio", type=int, action='store', nargs='+', default = [2], help='Ratio of epochs we train only the vpg functions and not reinforce. A value of 1 means 1:1')
     
     parser.add_argument("--honest_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
     parser.add_argument("--byz_starting_temp", type=float, action='store', nargs='+', default = [6.0], help='starting temperature')
     parser.add_argument("--temp_anneal", type=float, action='store', nargs='+', default = [0.985], help='rate at which the temperature anneals per epoch')
     parser.add_argument("--temp_fix_point", type=float, action='store', nargs='+', default = [1.0], help='point at which temperature will stop annealing or if heat jumps are on, the point at which the temperature will bounce back to its starting point')
-    parser.add_argument("--honest_can_send_either_value", type=bool, action='store', nargs='+', default = [False], help='can the honest agents send only their init value or other values also?')
-    parser.add_argument("--use_heat_jumps", type=bool, action='store', nargs='+', default = [False], help='when it hits the temp fix point, increase the temp back to the starting temp')
+    parser.add_argument("--honest_can_send_either_value", type=buildBool, action='store', nargs='+', default = [False], help='can the honest agents send only their init value or other values also?')
+    parser.add_argument("--use_heat_jumps", type=buildBool, action='store', nargs='+', default = [False], help='when it hits the temp fix point, increase the temp back to the starting temp')
     
     parser.add_argument("--rl_algo_wanted", type=str, action='store', nargs='+', default = ['vpg'], help='')
     parser.add_argument("--gamma", type=float, action='store', nargs='+', default = [0.99], help='')
@@ -82,9 +82,9 @@ def initialize_parameters():
     parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
     parser.add_argument("--hidden_sizes", action ='store', type=str, default = ['(16,8)'], nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
-    parser.add_argument("--activation", type=str, action='store', nargs='+', default = ["tanh"], help='Activation functions - tanh, relu, sigmoid')
-    parser.add_argument("--output_activation", type=None, action='store', nargs='+', default = [None], help='')
-    parser.add_argument("--use_bias", type=bool, action='store', nargs='+', default = [True], help='')
+    parser.add_argument("--activation", type=getActivation, action='store', nargs='+', default = [torch.tanh], help='Activation functions: tanh, relu, sigmoid')
+    parser.add_argument("--output_activation", type=getActivation, action='store', nargs='+', default = [None], help='')
+    parser.add_argument("--use_bias", type=buildBool, action='store', nargs='+', default = [True], help='')
     parser.add_argument("--starting_ep", type=int, action='store', nargs='+', default = [1], help='')
     parser.add_argument("--null_message_val", type=int, action='store', nargs='+', default = [2], help='')
     ###This value will be set as a function of commit_vals and num_agents
@@ -123,14 +123,6 @@ def initialize_parameters():
         print(' ====================== Running param combo ', i+1, '/', tot_combos, '======================')
         print('combo of params is:', pg[i])
 
-        print('paramtere grid', pg)
-
-        print(getActivation(pg[i]['activation']))
-        print(pg[i])
-        pg[i]['activation'] = getActivation(pg[i]['activation'])
-        print(pg[i])
-        pg[i]['output_activation'] = getActivation(pg[i]['output_activation'])
-
         env = consensus_env.ConsensusEnv(pg[i])
         # should I be using gym.make here??
 
@@ -153,6 +145,17 @@ def initialize_parameters():
     
         res.to_csv(exp_dir + "ParamCombos.csv")'''
 
+def buildBool(arg):
+    # convert strings to booleans
+    # this function is needed as there is a bug with argparse 
+    # where if your arg is by default 'False' and you then set it in
+    # the command line to 'False' then it will evaluate to being True
+    
+    print('running build bool', arg)
+    if arg == 'False':
+        return False
+    else:
+        return True
 
 def buildTuple(argument):
     count = 0
@@ -186,7 +189,10 @@ def buildNPArray(argument):
     return values
 
 def getActivation(activation_string):
+    print(' is this running at all?!?!?!')
+    print('activaiton string is: ', activation_string)
     if activation_string is 'tanh':
+        print('reuturning tanh')
         return torch.tanh
     if activation_string is 'relu':
         return torch.relu
