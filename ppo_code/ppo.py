@@ -120,10 +120,10 @@ def ppo_algo(env, seed=0,
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    honest_logger = EpochLogger(**logger_kwargs)
+    '''honest_logger = EpochLogger(**logger_kwargs)
     honest_logger.save_config(locals())
     byzantine_logger = EpochLogger(**logger_kwargs)
-    byzantine_logger.save_config(locals())
+    byzantine_logger.save_config(locals())'''
     #logger = EpochLogger(**logger_kwargs)
     #logger.save_config(locals())
 
@@ -149,7 +149,7 @@ def ppo_algo(env, seed=0,
     sync_params(env.byz_policy)
 
     # Count variables
-    var_counts = tuple(core.count_vars(module) for   in [env.honest_policy, env.byz_policy, 
+    var_counts = tuple(core.count_vars(module) for module in [env.honest_policy, env.byz_policy, 
                                                             env.honest_v_function, env.byz_v_function])
     #logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
@@ -163,7 +163,7 @@ def ppo_algo(env, seed=0,
 
         # Policy loss
         #TODO: neural network doesn't have .pi? how are we calculating policy and logprobs?
-        pi, logp = nn.pi(obs, act)
+        pi, logp = nn(obs, act)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
@@ -180,21 +180,21 @@ def ppo_algo(env, seed=0,
     # Set up function for computing value loss
     def compute_loss_v(data, nn):
         obs, ret = data['obs'], data['ret']
-        return ((nn.v(obs) - ret)**2).mean()
+        return ((nn(obs) - ret)**2).mean()
 
     # Set up optimizers for policy and value function
     # pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     # vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
-    honest_policy_optimizer = env.honest_optimizer
+    '''honest_policy_optimizer = env.honest_optimizer
     byzantine_policy_optimizer = env.byz_optimizer
     honest_v_optimizer = env.honest_v_function_optimizer
-    byz_v_optimizer = env.byz_v_function_optimizer
+    byz_v_optimizer = env.byz_v_function_optimizer'''
 
     # Set up model saving
     # TODO: find a way to log both of the neural networks. 
     ###Idea - create two logger classes - let's just focus on building this out for honest now ###
-    byzantine_logger.setup_pytorch_saver(env.byz_policy)
-    honest_logger.setup_pytorch_saver(env.honest_policy)
+    #byzantine_logger.setup_pytorch_saver(env.byz_policy)
+    #honest_logger.setup_pytorch_saver(env.honest_policy)
 
 
     def update():
@@ -250,28 +250,30 @@ def ppo_algo(env, seed=0,
 
                 kl = mpi_avg(pi_info_avg['kl'])
 
-                if kl > 1.5 * target_kl:
+                '''if kl > 1.5 * target_kl:
                     if updating_byzantine_network:
                         byzantine_logger.log(('Early stopping at step %d due to reaching max kl.'%i)
                     else:
                         honest_logger.log('Early stopping at step %d due to reaching max kl.'%i)
-                    break
+                    break'''
 
                 loss_pi_avg /= len(agent_type_list)
                 loss_pi_avg.backward()
                 # TODO: Get the average grads to refer to the correct neural network. 
                 ### Idea - we may have to go into the utils and modify these functions to have byzantine and honest gradients   
-                mpi_avg_grads(ac.pi)    # average grads across MPI processes
+                #mpi_avg_grads(ac.pi)    # average grads across MPI processes
                 if updating_byzantine_network:
+                    mpi_avg_grads(env.byz_policy)
                     env.byzantine_optimizer.step()
                 else:
+                    mpi_avg_grads(env.honest_policy)
                     env.honest_optimizer.step()
 
             #logger.store(StopIter=i)
-            if updating_byzantine_network:
+            '''if updating_byzantine_network:
                 byzantine_logger.store(StopIter = i)
             else:
-                honest_logger.store(StopIter = i)
+                honest_logger.store(StopIter = i)'''
 
             # Value function learning
             for i in range(train_v_iters):
@@ -304,7 +306,7 @@ def ppo_algo(env, seed=0,
                 #vf_optimizer.step()
 
             # Log changes from update
-            if updating_byzantine_network:
+            '''if updating_byzantine_network:
                 byzantine_logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
                         KL=kl, Entropy=ent, ClipFrac=cf,
                         DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
@@ -315,7 +317,7 @@ def ppo_algo(env, seed=0,
                         DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
                         DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
             # kl, ent, cf = pi_info_avg['kl'], pi_info_old_avg['ent'], pi_info_avg['cf']
-            '''logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
+            logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
                         KL=kl, Entropy=ent, ClipFrac=cf,
                         DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
                         DeltaLossV=(loss_v_avg.item() - v_l_old_avg))'''
@@ -330,7 +332,7 @@ def ppo_algo(env, seed=0,
             
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            v, end_sim = env.step(ep_len, t, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            end_sim = env.step(ep_len, t)#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
             
             #a, v, logp = env.step(torch.as_tensor(o, dtype=torch.float32))
             # action, value calcs, log probs. 
@@ -367,6 +369,9 @@ def ppo_algo(env, seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len) '''
 
             if end_sim:
+                for a in env.honest_list: 
+                    print(a.actionStr, a.committed_value)
+                print('========')
                 o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
 
         # TODO: get model save working. 

@@ -85,12 +85,11 @@ def getByzantineActionSpace(params):
         byz_action_space = getActionSpace(params, True, byzantine_inds=[0], can_send_either_value=params['honest_can_send_either_value'])
         byz_action_space_size = len(byz_action_space)
         #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
-        #print('byz action to ind', )
     return byz_action_space, byz_action_space_size#, byz_action_to_ind
 
 def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver_id):
     # return the effects of a particular action
-
+    #print('action string is ', actionStr)
     if actionStr == 'no_send':
         return params['null_message_val']
 
@@ -126,11 +125,14 @@ def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver
 # this should be almost as fast as it otherwise would be. I can even average the buffer results from each of them. 
 
 def onehotter(x, vocab_size):
+    x = torch.tensor(x)
     z = torch.zeros((x.shape[0], vocab_size))
-    z.scatter_(1,x.flatten().long().unsqueeze(1),1)
+    z.scatter_(1,x.flatten().long().dunsqueeze(1),1)
     return z.view(x.shape[0], vocab_size)
 
 class Agent:
+    '''I NEED THE AGENT TO RESET BUT NOT ITS BUFFER!!! Keep the agent. Just update its
+    neural network and if byzantine and init value.  '''
     def __init__(self, params, neural_net, value_function, isByzantine, agentID, byzantine_inds=None, give_inits = 0,
     give_only_own_init=''):
         self.isByzantine = isByzantine
@@ -158,6 +160,13 @@ class Agent:
         else:
             init_val = np.random.choice(params['commit_vals'], 1)[0]
         self.initVal = init_val
+        
+        
+        self.initState = torch.tensor(initState).float()
+        self.state = self.initState
+        self.committed_value = False
+
+    def initAgentState(self):
         initState = [init_val]
         if type(give_inits) is not int: # otherwise it is a list of the other values of everyone
             for a in range(params['num_agents']):
@@ -172,12 +181,8 @@ class Agent:
                 initState.append(params['null_message_val'])
                 if params['use_PKI']: # need to set null values as nobody has recieved values from anybody else
                     initState += [params['null_message_val']]*(params['num_agents']-1)
-        
-        self.initState = torch.tensor(initState).float()
-        self.state = self.initState
-        self.committed_value = False
 
-    def chooseAction(self, oneHotStateMapper, temperature, forceCommit=False): # device,
+    def chooseAction(self, oneHotStateMapper, temperature): # device,
         # look at the current state and decide what action to take. 
         oh = onehotter(self.state, self.stateDims).flatten() # each column is one of the states. 
         #making a decision:
@@ -192,11 +197,35 @@ class Agent:
 
         ###If commit in agents action space, then commit
         if 'commit' in self.actionStr:
-            self.committed_value = int(self.action.split('_')[1])
+            self.committed_value = int(self.actionStr.split('_')[1])
 
         value = self.value_function(oh)
             
         return self.action, action_logprob, value
+
+    def step(self, oneHotStateMapper, temperature): 
+        # this is a step for the agent which does not compute gradients. 
+        with torch.no_grad():
+
+            oh = onehotter(self.state, self.stateDims).flatten() # each column is one of the states. 
+            #making a decision:
+            logits = self.brain(oh)
+            real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=0)) # currently not vectorized
+            #should be able to apply sampling without computing this twice... 
+            temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=0) 
+            action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
+            action_logprob = real_logprobs[action_ind]
+
+            self.action = action_ind
+            self.actionStr = self.actionSpace[action_ind]
+
+            ###If commit in agents action space, then commit
+            if 'commit' in self.actionStr:
+                self.committed_value = int(self.actionStr.split('_')[1])
+
+            value = self.value_function(oh)
+        return action_ind.numpy(), action_logprob.numpy(), value.numpy()
+
             
 def updateStates(params, agent_list, honest_list):
 
@@ -233,7 +262,7 @@ def updateStates(params, agent_list, honest_list):
                     continue
                 # dont need to check if committed a value as already will prevent 
                 # from taking any actions other than no send.
-                new_state.append( actionEffect(params, actor.action, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
+                new_state.append( actionEffect(params, actor.actionStr, actor.initVal, reciever.state[actor_ind], reciever.agentID) )
                 actor_ind +=1
             reciever.state = new_state
 
@@ -253,7 +282,7 @@ def giveRewards(params, agent_list, honest_list):
     comm_values = []
     starting_values = [] # needed to check validity
     for h in honest_list: 
-        if h.committed_value is bool:
+        if type(h.committed_value) is not int:
             all_committed = False
             break
         else: 
@@ -264,22 +293,22 @@ def giveRewards(params, agent_list, honest_list):
         sim_done = True
         honest_comm_reward, satisfied_constraints = getCommReward(params, comm_values, starting_values)
         for i, a in enumerate(agent_list):
-            if not a.isByz:
+            if not a.isByzantine:
                 rewards[i] += honest_comm_reward
             else: 
                 rewards[i] -= honest_comm_reward
 
-        return rewards, sim_done
+    return rewards, sim_done
 
     for i, a in enumerate(agent_list): 
         # reward for sending to all in the first round
-        if a.isByz == False and a.buffer.ptr == 0 and 'send_to_all-' in a.action:
+        if a.isByzantine == False and a.buffer.ptr == 0 and 'send_to_all-' in a.action:
             rewards[i] += params['send_all_first_round_reward']
 
         # round length penalties
-        if not a.isByz:
+        if not a.isByzantine:
             rewards_to_go += params['additional_round_penalty']
-        elif a.isByz: 
+        elif a.isByzantine: 
             rewards_to_go -= params['additional_round_penalty']
 
     return rewards, sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
@@ -320,8 +349,6 @@ class ConsensusEnv():
         else: 
             state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
 
-        print('neural net inits', honest_action_space_size, state_oh_size)
-        print('neural net activation', params['activation'])
         self.honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
         self.byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
 
@@ -390,8 +417,37 @@ class ConsensusEnv():
         self.agent_list, self.honest_list, self.byzantine_list = self.initStatesandAgents()
 
     def reset(self):
-        self.agent_list, self.honest_list, self.byzantine_list = self.initStatesandAgents()
+        self.agent_list, self.honest_list, self.byzantine_list = self.resetStatesandAgents()
 
+    def resetStatesandAgents(self):
+
+        byzantine_inds = np.random.choice(range(self.params['num_agents']), size=self.params['num_byzantine'] ,replace=False )
+
+        #create the agents
+        byzantine_list = []
+        honest_list = []
+        # giving the honest init vals to the byzantine. need to decide all of them here. 
+        give_inits = list(np.random.choice([0,1], self.params['num_agents']))
+        #new_agent_list = []
+        for ind, a in enumerate(self.agent_list): 
+            a.initVal = give_inits[ind]
+            if ind in byzantine_inds:
+                a.isByzantine = True
+                a.brain = self.byz_policy
+                a.value_function=self.byz_v_function
+                byzantine_list.append(a)
+            else: 
+                a.isByzantine = False
+                a.brain = self.honest_policy
+                a.value_function=self.honest_v_function
+                honest_list.append(a)
+                # fixing the state. 
+                # NEED TO FIX TIHS
+                a.initState = a.initAgentState
+            a.state = a.initState
+            a.committed_value = False
+            
+            
     def initStatesandAgents(self):
     
         # need to randomize to avoid honest players learning which is Byzantine
@@ -405,8 +461,6 @@ class ConsensusEnv():
         # giving the honest init vals to the byzantine. need to decide all of them here. 
         give_inits = list(np.random.choice([0,1], self.params['num_agents']))
 
-        #print(give_inits)
-        #print(type(give_inits))
         agent_list = []
         for i in range(self.params['num_agents']):
             if i in byzantine_inds:
@@ -415,16 +469,16 @@ class ConsensusEnv():
                 agent_list.append(a)
             else: 
                 a = Agent(self.params, self.honest_policy, self.honest_v_function, False, i, give_only_own_init=give_inits[i])
-                #print('honest', i, 'give init', type(give_inits[i]))
                 honest_list.append(a) #give_inits=give_inits
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def step(self, ep_len, total_ep_rounds, honest_logger, byzantine_logger):
+    def step(self, ep_len, total_ep_rounds):#, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
         # anything though as each agent has their own buffer. 
 
         # choose new actions: 
+        actions_list, logp_list, v_list = [], [], []
         for agent in self.agent_list: 
             if agent.isByzantine: 
                 # TODO: implement temperature tracking
@@ -436,51 +490,47 @@ class ConsensusEnv():
             if type(agent.committed_value) is int: # dont change to True! Either it is False or a real value. 
                 a, logp, v = agent.action, None, None
             else:
-                a, logp, v = agent.chooseAction(self.oneHotStateMapper, curr_temperature)
+                a, logp, v = agent.step(self.oneHotStateMapper, curr_temperature)
+
+            actions_list.append(a)
+            logp_list.append(logp)
+            v_list.append(v)
                 
         # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
         rewards, sim_done = updateStates(self.params, self.agent_list, self.honest_list)
 
-            for ind, agent in enumerate(self.agent_list): 
+        for ind, agent in enumerate(self.agent_list): 
 
-                agent.buffer.store(o, a, rewards[ind], v, logp)
+            agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
 
-                ep_len += 1
-                timeout = ep_len == self.params['max_round_len']
-                terminal = sim_done or timeout
-                epoch_ended = total_ep_rounds==agent.buffer.obs_buf.shape[0] -1
+            #ep_len += 1
+            timeout = ep_len == self.params['max_round_len']
+            terminal = sim_done or timeout
+            epoch_ended = total_ep_rounds==agent.buffer.obs_buf.shape[0] -1
 
-                if terminal or epoch_ended:
-                    if epoch_ended and not(terminal):
-                        print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                    # if trajectory didn't reach terminal state, bootstrap value target
-                    if timeout or epoch_ended:
-                        _,_, v = agent.chooseAction(oneHotStateMapper, curr_temperature) #, device)
-                    else:
-                        v = 0
-                    agent.buffer.finish_path(v) # tie off this path no matter what
-                    #TODO: fix the logger here. 
-                    # if terminal:
-                        # only save EpRet / EpLen if trajectory finished
-                    #    logger.store(EpRet=ep_ret, EpLen=ep_len)
-                    #o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
-                    
-                    #termination_list.append(1)
+            if terminal or epoch_ended:
+                if epoch_ended and not(terminal):
+                    print( 'episode length is:', ep_len, 'total epoch rounds', total_ep_rounds )
+                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
+                # if trajectory didn't reach terminal state, bootstrap value target
+                if timeout or epoch_ended:
+                    _,_, v = agent.step(self.oneHotStateMapper, curr_temperature) #, device)
+                else:
+                    v = 0
+                agent.buffer.finish_path(v) # tie off this path no matter what
+                #TODO: fix the logger here. 
+                # if terminal:
+                    # only save EpRet / EpLen if trajectory finished
+                #    logger.store(EpRet=ep_ret, EpLen=ep_len)
+                #o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
+                
+                #termination_list.append(1)
 
         '''end_sim =False
         if sum(termination_list) == num_agents or honestPartiesCommit(honest_list):
             end_sim=True'''
         ### what v are we actually returning here?
-        return v, end_sim
-
-        # store in the buffer. 
-        
-    
-            
-        # then store to the buffer. 
-
-
-                # log the current state and action
+        return sim_done
 
     def render(self,  mode='human', close=False):
         print("This is a test of rendering the environment ")
@@ -537,6 +587,7 @@ class PPOBuffer:
         """
 
         path_slice = slice(self.path_start_idx, self.ptr)
+        #print(' values to try and add', self.rew_buf[path_slice], last_val)
         rews = np.append(self.rew_buf[path_slice], last_val) # adding the very last value. 
         vals = np.append(self.val_buf[path_slice], last_val)
         
