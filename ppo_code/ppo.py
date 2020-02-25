@@ -215,9 +215,9 @@ def ppo_algo(env, seed=0,
     #honest_logger.setup_pytorch_saver(env.honest_policy)
 
 
-    def update():
+    def update(agent_list_to_iter_through):
 
-        for agent_type_list in [env.honest_list, env.byzantine_list]:
+        for agent_type_list in agent_list_to_iter_through: 
 
             pi_l_old_avg = 0
             pi_info_old_avg = dict()
@@ -225,22 +225,20 @@ def ppo_algo(env, seed=0,
             updating_byzantine_network = agent_type_list[0].isByzantine
 
             for agent in agent_type_list[0:1]: 
-
                 data = agent.buffer.get() # get a dictionary format of the logger with the values normalized. 
-
                 pi_l_old, pi_info_old = compute_loss_pi(data, agent.brain, agent.stateDims)
                 pi_l_old = pi_l_old.item()
                 v_l_old = compute_loss_v(data, agent.value_function, agent.stateDims).item()
 
                 # add to the averages
-                v_l_old_avg += v_l_old
-                pi_l_old_avg += pi_l_old
+                v_l_old_avg = v_l_old
+                pi_l_old_avg = pi_l_old
                 #pi_info_old_avg hasn't been initialized, intantiate as copy of first policy returned
                 if not pi_info_old_avg:
                     pi_info_old_avg = pi_info_old.copy()
                 else: 
                     for k in pi_info_old.keys():
-                        pi_info_old_avg[k] += pi_info_old[k]
+                        pi_info_old_avg[k] = pi_info_old[k]
                     
             # divide by number of agents: 
             pi_l_old_avg /= len(agent_type_list[0:1])
@@ -262,13 +260,13 @@ def ppo_algo(env, seed=0,
                     data = agent.buffer.get()
                     loss_pi, pi_info = compute_loss_pi(data, agent.brain, agent.stateDims)
                     print('the pi loss', loss_pi)
-                    loss_pi_avg += loss_pi
+                    loss_pi_avg = loss_pi
 
                     if not pi_info_avg:
                         pi_info_avg = pi_info.copy()
                     else: 
                         for k in pi_info.keys():
-                            pi_info_avg[k] += pi_info[k]
+                            pi_info_avg[k] = pi_info[k]
 
                 kl = mpi_avg(pi_info_avg['kl'])
 
@@ -298,31 +296,33 @@ def ppo_algo(env, seed=0,
                 honest_logger.store(StopIter = i)'''
 
             # Value function learning
-            for i in range(train_v_iters):
-                if updating_byzantine_network: 
-                    env.byz_v_function_optimizer.zero_grad()
-                else: 
-                    env.honest_v_function_optimizer.zero_grad()
-                loss_v_avg = Variable(torch.zeros(1), requires_grad=True)
-                for agent in agent_type_list[0:1]:
-                    data = agent.buffer.get()
+            for agent in agent_type_list[0:1]:
+                data = agent.buffer.get()
+                for i in range(train_v_iters):
+                    if updating_byzantine_network: 
+                        env.byz_v_function_optimizer.zero_grad()
+                    else: 
+                        env.honest_v_function_optimizer.zero_grad()
+                    loss_v_avg = Variable(torch.zeros(1), requires_grad=True)
+                    
                     if agent.isByzantine:
                         loss_v = compute_loss_v(data, env.byz_v_function, agent.stateDims)
                     else: 
                         loss_v = compute_loss_v(data, env.honest_v_function, agent.stateDims)
-                    loss_v_avg+= loss_v
-                    # at this point reset the buffer!!
-                    agent.buffer.reset()
-                loss_v_avg /= len(agent_type_list[0:1])
+                    loss_v_avg = loss_v
+                        # at this point reset the buffer!!
+                    
+                    loss_v_avg /= len(agent_type_list[0:1])
 
-                loss_v_avg.backward()
+                    loss_v_avg.backward()
 
-                if updating_byzantine_network: 
-                    mpi_avg_grads(env.byz_v_function)
-                    env.byz_v_function_optimizer.step()
-                else: 
-                    mpi_avg_grads(env.honest_v_function)
-                    env.honest_v_function_optimizer.step()
+                    if updating_byzantine_network: 
+                        mpi_avg_grads(env.byz_v_function)
+                        env.byz_v_function_optimizer.step()
+                    else: 
+                        mpi_avg_grads(env.honest_v_function)
+                        env.honest_v_function_optimizer.step()
+                agent.buffer.reset()
 
                 #mpi_avg_grads(ac.v)    # average grads across MPI processes
                 #vf_optimizer.step()
@@ -343,6 +343,7 @@ def ppo_algo(env, seed=0,
                         KL=kl, Entropy=ent, ClipFrac=cf,
                         DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
                         DeltaLossV=(loss_v_avg.item() - v_l_old_avg))'''
+
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -394,7 +395,7 @@ def ppo_algo(env, seed=0,
                 for a in env.honest_list: 
                     print(a.actionStr, a.committed_value)
                 print('========')
-                o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
+                o, ep_ret, ep_len = env.resetStatesandAgents(), 0, 0 # reset the environment
 
         # TODO: get model save working. 
         # Save model
@@ -402,7 +403,12 @@ def ppo_algo(env, seed=0,
         #    logger.save_state({'env': env}, None)
 
         # Perform PPO update!
-        update()
+        if env.params['num_byzantine']==0:
+            update([env.honest_list])
+        elif env.params['num_byzantine']==env.params['num_agents']: 
+            update([env.byzantine_list])
+        else: 
+            update([env.honest_list, env.byzantine_list])
 
         # Log info about epoch
         # TODO: get the logger to work
@@ -439,6 +445,9 @@ def ppo_algo(env, seed=0,
             honest_logger.log_tabular('StopIter', average_only=True)
             honest_logger.log_tabular('Time', time.time()-start_time)
             honest_logger.dump_tabular()'''
+
+        # need to reset the agents and whole environment between epochs. 
+        o, ep_ret, ep_len = env.reset(), 0, 0
 
 '''if __name__ == '__main__':
     import argparse

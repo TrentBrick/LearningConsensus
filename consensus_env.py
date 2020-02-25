@@ -410,7 +410,7 @@ class ConsensusEnv():
         self.agent_list, self.honest_list, self.byzantine_list = self.initStatesandAgents()
 
     def reset(self):
-        self.honest_list, self.byzantine_list = self.resetStatesandAgents()
+        self.agent_list, self.honest_list, self.byzantine_list = self.initStatesandAgents()
 
     def resetStatesandAgents(self):
 
@@ -422,7 +422,6 @@ class ConsensusEnv():
         # giving the honest init vals to the byzantine. need to decide all of them here. 
         give_inits = list(np.random.choice([0,1], self.params['num_agents']))
         #new_agent_list = []
-
         for ind, a in enumerate(self.agent_list): 
             a.initVal = give_inits[ind]
             if ind in byzantine_inds:
@@ -499,12 +498,15 @@ class ConsensusEnv():
 
         for ind, agent in enumerate(self.agent_list): 
 
+            print(total_ep_rounds)
+            print('agent buffer len', agent.buffer.ptr)
             if type(agent.committed_value) is int and type(agent.committed_ptr) is not int:
                 # this is the point that hte agent has committed for the first time. 
                 agent.committed_ptr = agent.buffer.ptr
                 agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
             elif type(agent.committed_value) is int and type(agent.committed_ptr) is int:
                 # store with all blanks. 
+                
                 agent.buffer.store_blank()
             else: 
                 agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
@@ -624,8 +626,9 @@ class PPOBuffer:
         the buffer, with advantages appropriately normalized (shifted to have
         mean zero and std one). Also, resets some pointers in the buffer.
         """
+        # TODO: find a way to store this so dont have to do this every time it is called in the loss update!!
+        # probably best to ultimately have all honest and byz in the same buffer... 
         assert self.ptr == self.max_size    # buffer has to be full before you can get. what if it ends early???
-        
         # the next two lines implement the advantage normalization trick
         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
