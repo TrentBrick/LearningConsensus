@@ -295,7 +295,7 @@ def giveRewards(params, agent_list, honest_list):
 
     for i, a in enumerate(agent_list): 
         # reward for sending to all in the first round
-        if a.isByzantine == False and a.buffer.ptr == 0 and 'send_to_all-' in a.action:
+        if a.isByzantine == False and a.buffer.ptr == 0 and 'send_to_all-' in a.actionStr:
             rewards[i] += params['send_all_first_round_reward']
 
         # round length penalties
