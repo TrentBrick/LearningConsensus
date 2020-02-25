@@ -4,6 +4,7 @@ from torch.autograd import Variable
 from torch.optim import Adam
 import gym
 import time
+from consensus_env import onehotter
 import spinup.algos.pytorch.ppo.core as core
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
@@ -13,7 +14,7 @@ def ppo_algo(env, seed=0,
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10):
-    """
+    """f
     Proximal Policy Optimization (by clipping), 
 
     with early stopping based on approximate KL
@@ -158,19 +159,34 @@ def ppo_algo(env, seed=0,
     #buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
     
     # Set up function for computing PPO policy loss
-    def compute_loss_pi(data, nn):
+    def compute_loss_pi(data, nn, stateDims):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
         # Policy loss
-        #TODO: neural network doesn't have .pi? how are we calculating policy and logprobs?
-        pi, logp = nn(obs, act)
+        # TODO: need to be able to input all of the observations and compute their logp and the action. 
+        
+        # get prob dist for the observation: 
+        oh = onehotter(obs, stateDims)
+        print(oh.shape)
+        logits = nn(oh)
+        prob_dist = torch.nn.functional.softmax(logits, dim=1)
+        log_prob_dist = torch.log(prob_dist)
+        print(prob_dist.shape, act.shape)
+        logp = torch.gather(log_prob_dist, 1, act.long()) 
+        #logp = torch.log(prob_dist[act])
+
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
         # Useful extra info
         approx_kl = (logp_old - logp).mean().item()
-        ent = pi.entropy().mean().item()
+
+        # homemade entropy calc
+        # need to allow for numerical stability. nans propagate. 
+        unq_ents = prob_dist * (log_prob_dist+0.000000000001) # elementwise multiplication of the probabilities
+        ent = - unq_ents.mean().item() 
+        #ent = pi.entropy().mean().item()
         clipped = ratio.gt(1+clip_ratio) | ratio.lt(1-clip_ratio)
         clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
         pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
@@ -178,9 +194,11 @@ def ppo_algo(env, seed=0,
         return loss_pi, pi_info
 
     # Set up function for computing value loss
-    def compute_loss_v(data, nn):
+    def compute_loss_v(data, nn, stateDims):
         obs, ret = data['obs'], data['ret']
-        return ((nn(obs) - ret)**2).mean()
+        oh = onehotter(obs, stateDims)
+        print('nn oh v output', nn(oh).shape, ret.shape)
+        return ((nn(oh) - ret)**2).mean()
 
     # Set up optimizers for policy and value function
     # pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
@@ -206,13 +224,13 @@ def ppo_algo(env, seed=0,
             v_l_old_avg = 0
             updating_byzantine_network = agent_type_list[0].isByzantine
 
-            for agent in agent_type_list: 
+            for agent in agent_type_list[0:1]: 
 
                 data = agent.buffer.get() # get a dictionary format of the logger with the values normalized. 
 
-                pi_l_old, pi_info_old = compute_loss_pi(data, agent.brain)
+                pi_l_old, pi_info_old = compute_loss_pi(data, agent.brain, agent.stateDims)
                 pi_l_old = pi_l_old.item()
-                v_l_old = compute_loss_v(data, agent.brain).item()
+                v_l_old = compute_loss_v(data, agent.value_function, agent.stateDims).item()
 
                 # add to the averages
                 v_l_old_avg += v_l_old
@@ -225,21 +243,25 @@ def ppo_algo(env, seed=0,
                         pi_info_old_avg[k] += pi_info_old[k]
                     
             # divide by number of agents: 
-            pi_l_old_avg /= len(agent_type_list)
-            v_l_old_avg /= len(agent_type_list)
+            pi_l_old_avg /= len(agent_type_list[0:1])
+            v_l_old_avg /= len(agent_type_list[0:1])
             for k in pi_info_old_avg.keys():
-                pi_info_old_avg[k] = pi_info_old_avg[k]/len(agent_type_list)
+                pi_info_old_avg[k] = pi_info_old_avg[k]/len(agent_type_list[0:1])
             
             # Train policy with multiple steps of gradient descent
             for i in range(train_pi_iters):
-                pi_optimizer.zero_grad()
+                if updating_byzantine_network:
+                    env.byz_optimizer
+                else: 
+                    env.honest_optimizer
+                #pi_optimizer.zero_grad()
                 # NEED TO AVERAGE THESE HERE IN THIS LOOP
                 loss_pi_avg = Variable(torch.zeros(1), requires_grad=True)
                 pi_info_avg = dict()
-                for agent in agent_type_list:
+                for agent in agent_type_list[0:1]:
                     data = agent.buffer.get()
-                    loss_pi, pi_info = compute_loss_pi(data, agent.brain)
-
+                    loss_pi, pi_info = compute_loss_pi(data, agent.brain, agent.stateDims)
+                    print('the pi loss', loss_pi)
                     loss_pi_avg += loss_pi
 
                     if not pi_info_avg:
@@ -257,7 +279,7 @@ def ppo_algo(env, seed=0,
                         honest_logger.log('Early stopping at step %d due to reaching max kl.'%i)
                     break'''
 
-                loss_pi_avg /= len(agent_type_list)
+                loss_pi_avg /= len(agent_type_list[0:1])
                 loss_pi_avg.backward()
                 # TODO: Get the average grads to refer to the correct neural network. 
                 ### Idea - we may have to go into the utils and modify these functions to have byzantine and honest gradients   
@@ -282,16 +304,16 @@ def ppo_algo(env, seed=0,
                 else: 
                     env.honest_v_function_optimizer.zero_grad()
                 loss_v_avg = Variable(torch.zeros(1), requires_grad=True)
-                for agent in agent_type_list:
+                for agent in agent_type_list[0:1]:
                     data = agent.buffer.get()
                     if agent.isByzantine:
-                        loss_v = compute_loss_v(data, env.byz_v_function)
+                        loss_v = compute_loss_v(data, env.byz_v_function, agent.stateDims)
                     else: 
-                        loss_v = compute_loss_v(data, env.honest_v_function)
+                        loss_v = compute_loss_v(data, env.honest_v_function, agent.stateDims)
                     loss_v_avg+= loss_v
                     # at this point reset the buffer!!
                     agent.buffer.reset()
-                loss_v_avg /= len(agent_type_list)
+                loss_v_avg /= len(agent_type_list[0:1])
 
                 loss_v_avg.backward()
 
