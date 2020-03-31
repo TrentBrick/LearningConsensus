@@ -167,11 +167,11 @@ def ppo_algo(env, seed=0,
         
         # get prob dist for the observation: 
         oh = onehotter(obs, stateDims)
-        print(oh.shape)
+        #print(oh.shape)
         logits = nn(oh)
         prob_dist = torch.nn.functional.softmax(logits, dim=1)
         log_prob_dist = torch.log(prob_dist)
-        print(prob_dist.shape, act.shape)
+        #print(prob_dist.shape, act.shape)
         logp = torch.gather(log_prob_dist, 1, act.long()) 
         #logp = torch.log(prob_dist[act])
 
@@ -197,7 +197,7 @@ def ppo_algo(env, seed=0,
     def compute_loss_v(data, nn, stateDims):
         obs, ret = data['obs'], data['ret']
         oh = onehotter(obs, stateDims)
-        print('nn oh v output', nn(oh).shape, ret.shape)
+        #print('nn oh v output', nn(oh).shape, ret.shape)
         return ((nn(oh) - ret)**2).mean()
 
     # Set up optimizers for policy and value function
@@ -259,7 +259,7 @@ def ppo_algo(env, seed=0,
                 for agent in agent_type_list[0:1]:
                     data = agent.buffer.get()
                     loss_pi, pi_info = compute_loss_pi(data, agent.brain, agent.stateDims)
-                    print('the pi loss', loss_pi)
+                    #print('the pi loss', loss_pi)
                     loss_pi_avg = loss_pi
 
                     if not pi_info_avg:
@@ -355,7 +355,7 @@ def ppo_algo(env, seed=0,
             
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            end_sim = env.step(ep_len, t)#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            end_sim = env.env_step(ep_len, t)#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
             
             #a, v, logp = env.step(torch.as_tensor(o, dtype=torch.float32))
             # action, value calcs, log probs. 
@@ -392,10 +392,14 @@ def ppo_algo(env, seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len) '''
 
             if end_sim:
-                for a in env.honest_list: 
-                    print(a.actionStr, a.committed_value)
-                print('========')
+                #for a in env.honest_list: 
+                    #print(a.actionStr, a.committed_value)
+                #print('========')
                 o, ep_ret, ep_len = env.resetStatesandAgents(), 0, 0 # reset the environment
+
+            print('finished simulation', t)
+
+        print('======= end of simulations for epoch:', epoch)
 
         # TODO: get model save working. 
         # Save model

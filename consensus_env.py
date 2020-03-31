@@ -130,7 +130,7 @@ def onehotter(x, vocab_size):
     #x = torch.tensor(x)
     assert len(x.shape) ==2, 'X needs to be a matrix'
     z = torch.zeros((x.shape[0]*x.shape[1], vocab_size))
-    print('x shape', x.shape, 'z shape!', z.shape)
+    #print('x shape', x.shape, 'z shape!', z.shape)
     z.scatter_(1,x.flatten().long().unsqueeze(1),1)
     return z.view(x.shape[0], vocab_size*x.shape[1])
 
@@ -189,11 +189,13 @@ class Agent:
         logits = self.brain(oh)
         #log_probs = Categorical(logits=logits).log_prob()
         real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=1)) # currently not vectorized
-        print(real_logprobs)
+        #print(real_logprobs)
         #should be able to apply sampling without computing this twice... 
         temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=1) 
+        
         action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
-        print('printing these shapes', oh.shape, logits.shape, action_ind.shape, action_ind)
+        
+        #print('printing these shapes', oh.shape, logits.shape, action_ind.shape, action_ind)
         action_logprob = torch.gather(real_logprobs, 1, action_ind)
         # need to be able to do multiindex selection here!!! 
         #action_logprob = real_logprobs[action_ind]
@@ -212,7 +214,7 @@ class Agent:
         # look at the current state and decide what action to take. 
         return self.runNeuralNets(oneHotStateMapper, temperature)
 
-    def step(self, oneHotStateMapper, temperature): 
+    def agent_step(self, oneHotStateMapper, temperature): 
         # this is a step for the agent which does not compute gradients. 
         with torch.no_grad():
 
@@ -467,7 +469,7 @@ class ConsensusEnv():
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def step(self, ep_len, total_ep_rounds):#, honest_logger, byzantine_logger):
+    def env_step(self, ep_len, total_ep_rounds):#, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
         # anything though as each agent has their own buffer. 
 
@@ -485,7 +487,7 @@ class ConsensusEnv():
             if type(agent.committed_value) is int: # dont change to True! Either it is False or a real value. 
                 a, logp, v = agent.action, None, None
             else:
-                a, logp, v = agent.step(self.oneHotStateMapper, curr_temperature)
+                a, logp, v = agent.agent_step(self.oneHotStateMapper, curr_temperature)
 
             actions_list.append(a)
             logp_list.append(logp)
@@ -494,19 +496,18 @@ class ConsensusEnv():
         # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
         rewards, sim_done, got_it_right = updateStates(self.params, self.agent_list, self.honest_list)
 
-        print('actions list', actions_list)
+        #print('actions list', actions_list)
 
         for ind, agent in enumerate(self.agent_list): 
 
-            print(total_ep_rounds)
-            print('agent buffer len', agent.buffer.ptr)
+            #print(total_ep_rounds)
+            #print('agent buffer len', agent.buffer.ptr)
             if type(agent.committed_value) is int and type(agent.committed_ptr) is not int:
                 # this is the point that hte agent has committed for the first time. 
                 agent.committed_ptr = agent.buffer.ptr
                 agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
             elif type(agent.committed_value) is int and type(agent.committed_ptr) is int:
                 # store with all blanks. 
-                
                 agent.buffer.store_blank()
             else: 
                 agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
@@ -521,7 +522,7 @@ class ConsensusEnv():
                     print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
                 # if trajectory didn't reach terminal state, bootstrap value target
                 if timeout or epoch_ended:
-                    _,_, v = agent.step(self.oneHotStateMapper, curr_temperature) #, device)
+                    _,_, v = agent.agent_step(self.oneHotStateMapper, curr_temperature) #, device)
                 else:
                     v = 0
 
