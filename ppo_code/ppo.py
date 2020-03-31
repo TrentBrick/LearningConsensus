@@ -10,8 +10,8 @@ from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 
-def ppo_algo(env, seed=0, 
-        steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
+def ppo_algo(env, params, seed=0, 
+        actions_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10):
     """f
@@ -75,7 +75,7 @@ def ppo_algo(env, seed=0,
 
         seed (int): Seed for random number generators.
 
-        steps_per_epoch (int): Number of steps of interaction (state-action pairs) 
+        actions_per_epoch (int): Number of steps of interaction (state-action pairs) 
             for the agent and the environment in each epoch.
 
         epochs (int): Number of epochs of interaction (equivalent to
@@ -155,8 +155,8 @@ def ppo_algo(env, seed=0,
     #logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
     # Set up experience buffer
-    local_steps_per_epoch = int(steps_per_epoch / num_procs()) # how do local steps fill up the buffer??
-    #buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    #simulations_per_epoch = int(actions_per_epoch / num_procs()) # how do local steps fill up the buffer??
+    #buf = PPOBuffer(env.stateDims, 1, simulations_per_epoch, gamma=params['gamma'], lam=params['lam'])
     
     # Set up function for computing PPO policy loss
     def compute_loss_pi(data, nn, stateDims):
@@ -214,154 +214,65 @@ def ppo_algo(env, seed=0,
     #byzantine_logger.setup_pytorch_saver(env.byz_policy)
     #honest_logger.setup_pytorch_saver(env.honest_policy)
 
+    def update(buf, nn, vf, pi_optimizer, vf_optimizer, stateDims):
+        data = buf.get()
 
-    def update(agent_list_to_iter_through):
+        pi_l_old, pi_info_old = compute_loss_pi(data, nn, stateDims)
+        pi_l_old = pi_l_old.item()
+        v_l_old = compute_loss_v(data, nn, stateDims).item()
 
-        for agent_type_list in agent_list_to_iter_through: 
+        # Train policy with multiple steps of gradient descent
+        for i in range(train_pi_iters):
+            pi_optimizer.zero_grad()
+            loss_pi, pi_info = compute_loss_pi(data, nn, stateDims)
+            kl = mpi_avg(pi_info['kl'])
+            if kl > 1.5 * target_kl:
+                #logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                break
+            loss_pi.backward()
+            mpi_avg_grads(nn)    # average grads across MPI processes
+            pi_optimizer.step()
 
-            pi_l_old_avg = 0
-            pi_info_old_avg = dict()
-            v_l_old_avg = 0
-            updating_byzantine_network = agent_type_list[0].isByzantine
+        #logger.store(StopIter=i)
 
-            for agent in agent_type_list[0:1]: 
-                data = agent.buffer.get() # get a dictionary format of the logger with the values normalized. 
-                pi_l_old, pi_info_old = compute_loss_pi(data, agent.brain, agent.stateDims)
-                pi_l_old = pi_l_old.item()
-                v_l_old = compute_loss_v(data, agent.value_function, agent.stateDims).item()
+        # Value function learning
+        for i in range(train_v_iters):
+            vf_optimizer.zero_grad()
+            loss_v = compute_loss_v(data, vf, stateDims)
+            loss_v.backward()
+            mpi_avg_grads(vf)    # average grads across MPI processes
+            vf_optimizer.step()
 
-                # add to the averages
-                v_l_old_avg = v_l_old
-                pi_l_old_avg = pi_l_old
-                #pi_info_old_avg hasn't been initialized, intantiate as copy of first policy returned
-                if not pi_info_old_avg:
-                    pi_info_old_avg = pi_info_old.copy()
-                else: 
-                    for k in pi_info_old.keys():
-                        pi_info_old_avg[k] = pi_info_old[k]
-                    
-            # divide by number of agents: 
-            pi_l_old_avg /= len(agent_type_list[0:1])
-            v_l_old_avg /= len(agent_type_list[0:1])
-            for k in pi_info_old_avg.keys():
-                pi_info_old_avg[k] = pi_info_old_avg[k]/len(agent_type_list[0:1])
-            
-            # Train policy with multiple steps of gradient descent
-            for i in range(train_pi_iters):
-                if updating_byzantine_network:
-                    env.byz_optimizer
-                else: 
-                    env.honest_optimizer
-                #pi_optimizer.zero_grad()
-                # NEED TO AVERAGE THESE HERE IN THIS LOOP
-                loss_pi_avg = Variable(torch.zeros(1), requires_grad=True)
-                pi_info_avg = dict()
-                for agent in agent_type_list[0:1]:
-                    data = agent.buffer.get()
-                    loss_pi, pi_info = compute_loss_pi(data, agent.brain, agent.stateDims)
-                    #print('the pi loss', loss_pi)
-                    loss_pi_avg = loss_pi
-
-                    if not pi_info_avg:
-                        pi_info_avg = pi_info.copy()
-                    else: 
-                        for k in pi_info.keys():
-                            pi_info_avg[k] = pi_info[k]
-
-                kl = mpi_avg(pi_info_avg['kl'])
-
-                '''if kl > 1.5 * target_kl:
-                    if updating_byzantine_network:
-                        byzantine_logger.log(('Early stopping at step %d due to reaching max kl.'%i)
-                    else:
-                        honest_logger.log('Early stopping at step %d due to reaching max kl.'%i)
-                    break'''
-
-                loss_pi_avg /= len(agent_type_list[0:1])
-                loss_pi_avg.backward()
-                # TODO: Get the average grads to refer to the correct neural network. 
-                ### Idea - we may have to go into the utils and modify these functions to have byzantine and honest gradients   
-                #mpi_avg_grads(ac.pi)    # average grads across MPI processes
-                if updating_byzantine_network:
-                    mpi_avg_grads(env.byz_policy)
-                    env.byzantine_optimizer.step()
-                else:
-                    mpi_avg_grads(env.honest_policy)
-                    env.honest_optimizer.step()
-
-            #logger.store(StopIter=i)
-            '''if updating_byzantine_network:
-                byzantine_logger.store(StopIter = i)
-            else:
-                honest_logger.store(StopIter = i)'''
-
-            # Value function learning
-            for agent in agent_type_list[0:1]:
-                data = agent.buffer.get()
-                for i in range(train_v_iters):
-                    if updating_byzantine_network: 
-                        env.byz_v_function_optimizer.zero_grad()
-                    else: 
-                        env.honest_v_function_optimizer.zero_grad()
-                    loss_v_avg = Variable(torch.zeros(1), requires_grad=True)
-                    
-                    if agent.isByzantine:
-                        loss_v = compute_loss_v(data, env.byz_v_function, agent.stateDims)
-                    else: 
-                        loss_v = compute_loss_v(data, env.honest_v_function, agent.stateDims)
-                    loss_v_avg = loss_v
-                        # at this point reset the buffer!!
-                    
-                    loss_v_avg /= len(agent_type_list[0:1])
-
-                    loss_v_avg.backward()
-
-                    if updating_byzantine_network: 
-                        mpi_avg_grads(env.byz_v_function)
-                        env.byz_v_function_optimizer.step()
-                    else: 
-                        mpi_avg_grads(env.honest_v_function)
-                        env.honest_v_function_optimizer.step()
-                agent.buffer.reset()
-
-                #mpi_avg_grads(ac.v)    # average grads across MPI processes
-                #vf_optimizer.step()
-
-            # Log changes from update
-            '''if updating_byzantine_network:
-                byzantine_logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
-                        KL=kl, Entropy=ent, ClipFrac=cf,
-                        DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
-                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
-            else:
-                honest_logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
-                        KL=kl, Entropy=ent, ClipFrac=cf,
-                        DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
-                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))
-            # kl, ent, cf = pi_info_avg['kl'], pi_info_old_avg['ent'], pi_info_avg['cf']
-            logger.store(LossPi=pi_l_old_avg, LossV=v_l_old_avg,
-                        KL=kl, Entropy=ent, ClipFrac=cf,
-                        DeltaLossPi=(loss_pi_avg.item() - pi_l_old_avg),
-                        DeltaLossV=(loss_v_avg.item() - v_l_old_avg))'''
-
+        '''# Log changes from update
+        kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
+        logger.store(LossPi=pi_l_old, LossV=v_l_old,
+                     KL=kl, Entropy=ent, ClipFrac=cf,
+                     DeltaLossPi=(loss_pi.item() - pi_l_old),
+                     DeltaLossV=(loss_v.item() - v_l_old))'''
 
     # Prepare for interaction with environment
     start_time = time.time()
-    o, ep_ret, ep_len = env.reset(), 0, 0
+    # TODO: see if I need to keep any of these return functions. 
+    o, ep_ret, ep_len = env.reset(), 0, 0 
 
+    local_actions_per_epoch = env.local_actions_per_epoch
+    sim_done = False
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
-        for t in range(local_steps_per_epoch): # will keep looping and even restarting the environment until the end here. 
-            
+
+        while env.majority_agent_buffer.ptr < local_actions_per_epoch and not stop_epoch:
+     
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            end_sim = env.env_step(ep_len, t)#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            sim_done = env.env_step()#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
             
+
             #a, v, logp = env.step(torch.as_tensor(o, dtype=torch.float32))
             # action, value calcs, log probs. 
             #next_o, r, d, _ = env.step(a) # reward and indicator for died. 
             #ep_ret += r
-            ep_len += 1
+            
+            #ep_len += 1 # local count that corresponds to the current simulation. 
 
             # save and log
             #buf.store(o, a, r, v, logp)
@@ -372,7 +283,7 @@ def ppo_algo(env, seed=0,
             #o = next_o
             #terminal = d or timeout
             #timeout = ep_len == max_ep_len
-            #epoch_ended = t==local_steps_per_epoch-1 
+            #epoch_ended = t==simulations_per_epoch-1 
 
             ''' I need to have the done signal only be true if all the agents have committed. 
             when a single agent commmits I need to run everything below for its own buffer. 
@@ -391,13 +302,13 @@ def ppo_algo(env, seed=0,
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len) '''
 
-            if end_sim:
+            if sim_done:
                 #for a in env.honest_list: 
                     #print(a.actionStr, a.committed_value)
                 #print('========')
                 o, ep_ret, ep_len = env.resetStatesandAgents(), 0, 0 # reset the environment
 
-            print('finished simulation', t)
+            #print('finished simulation', t)
 
         print('======= end of simulations for epoch:', epoch)
 
@@ -407,12 +318,12 @@ def ppo_algo(env, seed=0,
         #    logger.save_state({'env': env}, None)
 
         # Perform PPO update!
-        if env.params['num_byzantine']==0:
-            update([env.honest_list])
-        elif env.params['num_byzantine']==env.params['num_agents']: 
-            update([env.byzantine_list])
-        else: 
-            update([env.honest_list, env.byzantine_list])
+        if env.params['num_byzantine']>0:
+            update(env.byz_buffer, env.byz_policy, env.byz_v_function, 
+            env.byz_optimizer, env.byz_v_function_optimizer, env.stateDims)
+        if env.params['num_agents'] - env.params['num_byzantine'] > 0: 
+            update(env.honest_buffer, env.honest_policy, env.honest_v_function,
+            env.honest_optimizer, env.honest_v_function_optimizer, env.stateDims)
 
         # Log info about epoch
         # TODO: get the logger to work
@@ -422,7 +333,7 @@ def ppo_algo(env, seed=0,
             byzantine_logger.log_tabular('EpRet', with_min_and_max=True)
             byzantine_logger.log_tabular('EpLen', average_only=True)
             byzantine_logger.log_tabular('VVals', with_min_and_max=True)
-            byzantine_logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
+            byzantine_logger.log_tabular('TotalEnvInteracts', (epoch+1)*actions_per_epoch)
             byzantine_logger.log_tabular('LossPi', average_only=True)
             byzantine_logger.log_tabular('LossV', average_only=True)
             byzantine_logger.log_tabular('DeltaLossPi', average_only=True)
@@ -438,7 +349,7 @@ def ppo_algo(env, seed=0,
             honest_logger.log_tabular('EpRet', with_min_and_max=True)
             honest_logger.log_tabular('EpLen', average_only=True)
             honest_logger.log_tabular('VVals', with_min_and_max=True)
-            honest_logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
+            honest_logger.log_tabular('TotalEnvInteracts', (epoch+1)*actions_per_epoch)
             honest_logger.log_tabular('LossPi', average_only=True)
             honest_logger.log_tabular('LossV', average_only=True)
             honest_logger.log_tabular('DeltaLossPi', average_only=True)
@@ -474,5 +385,5 @@ def ppo_algo(env, seed=0,
 
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
-        seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+        seed=args.seed, actions_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs)'''

@@ -137,7 +137,8 @@ def onehotter(x, vocab_size):
 class Agent:
     '''I NEED THE AGENT TO RESET BUT NOT ITS BUFFER!!! Keep the agent. Just update its
     neural network and if byzantine and init value.  '''
-    def __init__(self, params, neural_net, value_function, isByzantine, agentID, byzantine_inds=None, give_inits = 0):
+    def __init__(self, params, neural_net, value_function, 
+    isByzantine, agentID, byzantine_inds=None, give_inits = 0):
         self.isByzantine = isByzantine
         self.agentID = agentID
         self.brain = neural_net
@@ -151,8 +152,8 @@ class Agent:
         else: 
             self.stateDims = (len(params['commit_vals'])+1)*params['num_agents']
         '''
-        local_rounds_per_epoch = params['rounds_per_epoch'] // params['ncores']
-        self.buffer = PPOBuffer(self.stateDims, 1, local_rounds_per_epoch, gamma=params['gamma'], lam=params['lam'])
+        #local_actions_per_epoch = params['rounds_per_epoch'] // params['ncores']
+        #self.buffer = PPOBuffer(self.stateDims, 1, local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
 
         if isByzantine:
             init_val = params['null_message_val'] # doesnt need an init value 
@@ -354,6 +355,14 @@ class ConsensusEnv():
         self.honest_oneHotActionMapper = np.eye(honest_action_space_size)
         self.byz_oneHotActionMapper = np.eye(byz_action_space_size)
         
+        stateDims = len(params['commit_vals'])+1 
+        self.local_actions_per_epoch = params['rounds_per_epoch'] // params['ncores']
+        #self.buffer = PPOBuffer(self.stateDims, 1, local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
+
+        self.honest_buffer = PPOBuffer(stateDims, 1, self.local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
+        self.byz_buffer = PPOBuffer(stateDims, 1, self.local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
+        self.majority_agent_buffer = self.byz_buffer if params['num_byzantine'] > (params['num_agents'] - params['num_byzantine']) else self.honest_buffer 
+
         #TODO: Need to call these from params
         adv_hidden_sizes = (16,8)
         adv_learning_rate=0.003
@@ -497,29 +506,41 @@ class ConsensusEnv():
         rewards, sim_done, got_it_right = updateStates(self.params, self.agent_list, self.honest_list)
 
         #print('actions list', actions_list)
+        for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
 
-        for ind, agent in enumerate(self.agent_list): 
+            # only want to store things if the agent has not committed. 
+            if type(agent.committed_value) is bool: 
+                buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
+                buf.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind] )
 
+            if sim_done:
+
+
+            '''
             #print(total_ep_rounds)
             #print('agent buffer len', agent.buffer.ptr)
-            if type(agent.committed_value) is int and type(agent.committed_ptr) is not int:
+            #if type(agent.committed_value) is int and type(agent.committed_ptr) is not int:
                 # this is the point that hte agent has committed for the first time. 
-                agent.committed_ptr = agent.buffer.ptr
-                agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
+                #agent.committed_ptr = agent.buffer.ptr
+                #agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
             elif type(agent.committed_value) is int and type(agent.committed_ptr) is int:
                 # store with all blanks. 
                 agent.buffer.store_blank()
             else: 
                 agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
+            '''
 
-            timeout = ep_len == self.params['max_round_len']
-            terminal = sim_done or timeout
-            epoch_ended = total_ep_rounds==agent.buffer.obs_buf.shape[0] -1
+            #timeout = ep_len == self.params['max_round_len'] # this episode is going for too long. 
+            #terminal = sim_done or timeout # simulation is naturally done or must be ended as gone too long. 
+            #finish_with_curr_simulation = buf.ptr > env.local_actions_per_epoch  # this is the last simulation 
 
-            if terminal or epoch_ended:
-                if epoch_ended and not(terminal):
+            #if terminal: # tie off this simulation for this particular agent and start a new one. 
+
+
+            '''if terminal or epoch_ended: # should end for any reason. 
+                if epoch_ended and not(terminal): # cut off early
                     print( 'episode length is:', ep_len, 'total epoch rounds', total_ep_rounds )
-                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
+                    print('Warning: trajectory cut off early by epoch at %d steps.'%ep_len, flush=True)
                 # if trajectory didn't reach terminal state, bootstrap value target
                 if timeout or epoch_ended:
                     _,_, v = agent.agent_step(self.oneHotStateMapper, curr_temperature) #, device)
@@ -530,6 +551,7 @@ class ConsensusEnv():
                     agent.buffer.fix_reward_point(agent.committed_ptr, rewards[ind])
 
                 agent.buffer.finish_path(v) # tie off this path no matter what
+                '''
                 #TODO: fix the logger here. 
                 # if terminal:
                     # only save EpRet / EpLen if trajectory finished
@@ -547,6 +569,7 @@ class ConsensusEnv():
     def render(self,  mode='human', close=False):
         print("This is a test of rendering the environment ")
 
+
 class PPOBuffer:
     """
     A buffer for storing trajectories experienced by a PPO agent interacting
@@ -558,13 +581,13 @@ class PPOBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
-        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.adv_buf = np.zeros(size, dtype=np.float32)
-        self.rew_buf = np.zeros(size, dtype=np.float32)
-        self.ret_buf = np.zeros(size, dtype=np.float32)
-        self.val_buf = np.zeros(size, dtype=np.float32)
-        self.logp_buf = np.zeros(size, dtype=np.float32)
+        self.obs_buf = [] #np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = [] #np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
+        self.adv_buf = [] #np.zeros(size, dtype=np.float32)
+        self.rew_buf = [] #np.zeros(size, dtype=np.float32)
+        self.ret_buf = [] #np.zeros(size, dtype=np.float32)
+        self.val_buf = [] #np.zeros(size, dtype=np.float32)
+        self.logp_buf = [] #np.zeros(size, dtype=np.float32)
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
 
@@ -582,12 +605,12 @@ class PPOBuffer:
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
-        assert self.ptr < self.max_size     # buffer has to have room so you can store
-        self.obs_buf[self.ptr] = obs
-        self.act_buf[self.ptr] = act
-        self.rew_buf[self.ptr] = rew # the actual reward recieved. 
-        self.val_buf[self.ptr] = val # the value function estimate. 
-        self.logp_buf[self.ptr] = logp
+
+        self.obs_buf.append(obs)
+        self.act_buf.append(act)
+        self.rew_buf.append(rew) # the actual reward recieved. 
+        self.val_buf.append(val) # the value function estimate. 
+        self.logp_buf.append(logp)
         self.ptr += 1
 
     def finish_path(self, last_val=0):
@@ -627,7 +650,22 @@ class PPOBuffer:
         the buffer, with advantages appropriately normalized (shifted to have
         mean zero and std one). Also, resets some pointers in the buffer.
         """
-        # TODO: find a way to store this so dont have to do this every time it is called in the loss update!!
+
+        #convert all to numpy array and then torch. 
+        self.obs_buf = np.asarray(self.obs_buf)
+        self.act_buf = np.asarray(self.act_buf) 
+        self.rew_buf = np.asarray(self.rew_bef) # the actual reward recieved. 
+        self.val_buf = np.asarray(self.val_buf) # the value function estimate. 
+        self.logp_buf = np.asarray(self.logp_buf)
+
+        # the next two lines implement the advantage normalization trick
+        adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
+        self.adv_buf = (self.adv_buf - adv_mean) / adv_std
+        data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
+                    adv=self.adv_buf, logp=self.logp_buf)
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
+
+        '''# TODO: find a way to store this so dont have to do this every time it is called in the loss update!!
         # probably best to ultimately have all honest and byz in the same buffer... 
         assert self.ptr == self.max_size    # buffer has to be full before you can get. what if it ends early???
         # the next two lines implement the advantage normalization trick
@@ -636,7 +674,7 @@ class PPOBuffer:
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     adv=self.adv_buf, logp=self.logp_buf)
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
-
+        '''
     def reset(self):
         self.ptr, self.path_start_idx = 0, 0
 
