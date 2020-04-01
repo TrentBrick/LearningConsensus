@@ -10,7 +10,7 @@ from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 
-def ppo_algo(env, params, seed=0, 
+def ppo_algo(env, seed=0, 
         actions_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10):
@@ -166,16 +166,17 @@ def ppo_algo(env, params, seed=0,
         # TODO: need to be able to input all of the observations and compute their logp and the action. 
         
         # get prob dist for the observation: 
+        #print('observation for compute loss pi', obs, obs.shape)
         oh = onehotter(obs, stateDims)
         #print(oh.shape)
         logits = nn(oh)
         prob_dist = torch.nn.functional.softmax(logits, dim=1)
         log_prob_dist = torch.log(prob_dist)
-        #print(prob_dist.shape, act.shape)
-        logp = torch.gather(log_prob_dist, 1, act.long()) 
+        logp = torch.gather(log_prob_dist, 1, act.unsqueeze(1).long()) 
         #logp = torch.log(prob_dist[act])
 
         ratio = torch.exp(logp - logp_old)
+        #print( 'ratio', ratio, ratio.shape, 'advantage',  adv, adv.shape)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
@@ -197,16 +198,9 @@ def ppo_algo(env, params, seed=0,
     def compute_loss_v(data, nn, stateDims):
         obs, ret = data['obs'], data['ret']
         oh = onehotter(obs, stateDims)
-        #print('nn oh v output', nn(oh).shape, ret.shape)
+        #print('obs', obs, obs.shape, 'ret', ret, ret.shape)
+        #print('nn oh v output', nn(oh), nn(oh).shape)
         return ((nn(oh) - ret)**2).mean()
-
-    # Set up optimizers for policy and value function
-    # pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
-    # vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
-    '''honest_policy_optimizer = env.honest_optimizer
-    byzantine_policy_optimizer = env.byz_optimizer
-    honest_v_optimizer = env.honest_v_function_optimizer
-    byz_v_optimizer = env.byz_v_function_optimizer'''
 
     # Set up model saving
     # TODO: find a way to log both of the neural networks. 
@@ -217,9 +211,11 @@ def ppo_algo(env, params, seed=0,
     def update(buf, nn, vf, pi_optimizer, vf_optimizer, stateDims):
         data = buf.get()
 
+        #print('data that is collected before the update', data)
+
         pi_l_old, pi_info_old = compute_loss_pi(data, nn, stateDims)
         pi_l_old = pi_l_old.item()
-        v_l_old = compute_loss_v(data, nn, stateDims).item()
+        v_l_old = compute_loss_v(data, vf, stateDims).item()
 
         # Train policy with multiple steps of gradient descent
         for i in range(train_pi_iters):
@@ -256,51 +252,15 @@ def ppo_algo(env, params, seed=0,
     o, ep_ret, ep_len = env.reset(), 0, 0 
 
     local_actions_per_epoch = env.local_actions_per_epoch
-    sim_done = False
+    
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
-
-        while env.majority_agent_buffer.ptr < local_actions_per_epoch and not stop_epoch:
+        sim_done = False
+        while env.majority_agent_buffer.ptr < local_actions_per_epoch and not sim_done:
      
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
             sim_done = env.env_step()#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
-            
-
-            #a, v, logp = env.step(torch.as_tensor(o, dtype=torch.float32))
-            # action, value calcs, log probs. 
-            #next_o, r, d, _ = env.step(a) # reward and indicator for died. 
-            #ep_ret += r
-            
-            #ep_len += 1 # local count that corresponds to the current simulation. 
-
-            # save and log
-            #buf.store(o, a, r, v, logp)
-            # TODO: figure out how to get the logger working. 
-            #logger.store(VVals=v)
-            
-            # Update obs (critical!)
-            #o = next_o
-            #terminal = d or timeout
-            #timeout = ep_len == max_ep_len
-            #epoch_ended = t==simulations_per_epoch-1 
-
-            ''' I need to have the done signal only be true if all the agents have committed. 
-            when a single agent commmits I need to run everything below for its own buffer. 
-            but then I dont want to reset until all of them have done their things. keep 
-            writing to the buffer with blanks until this happens. 
-            if terminal or epoch_ended:
-                if epoch_ended and not(terminal):
-                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                # if trajectory didn't reach terminal state, bootstrap value target
-                if timeout or epoch_ended:
-                    _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                else:
-                    v = 0
-                buf.finish_path(v) # tie off this path no matter what
-                if terminal:
-                    # only save EpRet / EpLen if trajectory finished
-                    logger.store(EpRet=ep_ret, EpLen=ep_len) '''
 
             if sim_done:
                 #for a in env.honest_list: 
@@ -310,7 +270,7 @@ def ppo_algo(env, params, seed=0,
 
             #print('finished simulation', t)
 
-        print('======= end of simulations for epoch:', epoch)
+        print('======= end of simulations for epoch:', epoch+1)
 
         # TODO: get model save working. 
         # Save model
@@ -318,12 +278,13 @@ def ppo_algo(env, params, seed=0,
         #    logger.save_state({'env': env}, None)
 
         # Perform PPO update!
-        if env.params['num_byzantine']>0:
-            update(env.byz_buffer, env.byz_policy, env.byz_v_function, 
-            env.byz_optimizer, env.byz_v_function_optimizer, env.stateDims)
         if env.params['num_agents'] - env.params['num_byzantine'] > 0: 
             update(env.honest_buffer, env.honest_policy, env.honest_v_function,
             env.honest_optimizer, env.honest_v_function_optimizer, env.stateDims)
+        if env.params['num_byzantine']>0:
+            update(env.byz_buffer, env.byz_policy, env.byz_v_function, 
+            env.byz_optimizer, env.byz_v_function_optimizer, env.stateDims)
+        
 
         # Log info about epoch
         # TODO: get the logger to work

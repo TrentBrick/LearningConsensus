@@ -39,7 +39,7 @@ def initialize_parameters():
     
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
-    parser.add_argument("--rounds_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
+    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
     parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [1000], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
@@ -131,7 +131,7 @@ def initialize_parameters():
         mpi_fork(pg[i]['ncores'])
         # TODO: CHANGE core.MLPActorCritic when NN hidden layers are changed
         ppo.ppo_algo(env, gamma=pg[i]['gamma'], 
-            seed=pg[i]['random_seed'], steps_per_epoch=pg[i]['rounds_per_epoch'], 
+            seed=pg[i]['random_seed'], actions_per_epoch=pg[i]['actions_per_epoch'], 
             epochs=pg[i]['epochs'])
             #logger_kwargs=logger_kwargs)
         

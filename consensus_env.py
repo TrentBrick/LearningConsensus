@@ -7,6 +7,7 @@ import spinup.algos.pytorch.ppo.core as core
 import itertools
 from collections import OrderedDict
 from spinup.utils.mpi_tools import mpi_statistics_scalar
+import copy
 #from actions import getActionSpace, actionEffect
 
 def getActionSpace(params, isByzantine, byzantine_inds=None, can_send_either_value=True):
@@ -128,7 +129,7 @@ def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver
 
 def onehotter(x, vocab_size):
     #x = torch.tensor(x)
-    assert len(x.shape) ==2, 'X needs to be a matrix'
+    assert len(x.shape) ==2, 'X needs to be a matrix, actual shape is: ' + str(x.shape) 
     z = torch.zeros((x.shape[0]*x.shape[1], vocab_size))
     #print('x shape', x.shape, 'z shape!', z.shape)
     z.scatter_(1,x.flatten().long().unsqueeze(1),1)
@@ -147,6 +148,7 @@ class Agent:
         self.actionDims = len(self.actionSpace)
         self.stateDims = len(params['commit_vals'])+1 # +1 for the null value. 
         self.committed_ptr =  False
+        self.reward = 0
         '''if params['use_PKI']: 
             self.stateDims = (len(params['commit_vals'])+1)*(params['num_agents']**2-params['num_agents']+1)
         else: 
@@ -208,8 +210,7 @@ class Agent:
             self.committed_value = int(self.actionStr.split('_')[1])
 
         value = self.value_function(oh)
-
-        return self.action, action_logprob, value
+        return self.action.squeeze(), action_logprob.squeeze(), value.squeeze()
 
     def chooseAction(self, oneHotStateMapper, temperature): # device,
         # look at the current state and decide what action to take. 
@@ -224,7 +225,7 @@ class Agent:
         return action_ind.numpy(), action_logprob.numpy(), value.numpy()
 
             
-def updateStates(params, agent_list, honest_list):
+def updateStates(params, agent_list, honest_list, curr_sim_len):
 
     # all actions are placed. agent sends what they recieved in the last round along withteir current messages. 
     # this internally resolves all of the agents and sets their new state. 
@@ -249,7 +250,6 @@ def updateStates(params, agent_list, honest_list):
 
     else: 
         #look at all agent actions and update the state of each to accomodate actions
-        
         for reciever in agent_list:
             new_state = [reciever.initVal] # keep track of the agent's initial value, 
             #want to show to the NN each time
@@ -264,19 +264,17 @@ def updateStates(params, agent_list, honest_list):
             reciever.state = torch.tensor(new_state).float()
 
     # calculate the rewards: 
-    rewards, sim_done, got_it_right = giveRewards(params, agent_list, honest_list)
+    sim_done = giveRewards(params, agent_list, honest_list, curr_sim_len)
 
-    return rewards, sim_done, got_it_right
+    return sim_done
 
-def giveRewards(params, agent_list, honest_list):
+def giveRewards(params, agent_list, honest_list, curr_sim_len):
     # checks to see if the honest parties have obtained both
     # consistency and validity in addition to any other rewards
 
-    rewards = np.zeros((len(agent_list)))
     sim_done = False
     # first check if all honest have committed and give the final reward if so
     all_committed = True
-    satisfied_constraints = False
     comm_values = []
     starting_values = [] # needed to check validity
     for h in honest_list: 
@@ -289,25 +287,25 @@ def giveRewards(params, agent_list, honest_list):
     
     if all_committed: 
         sim_done = True
-        honest_comm_reward, satisfied_constraints = getCommReward(params, comm_values, starting_values)
+        honest_comm_reward , satisfied_constraints = getCommReward(params, comm_values, starting_values)
         for i, a in enumerate(agent_list):
             if not a.isByzantine:
-                rewards[i] += honest_comm_reward
+                a.reward += honest_comm_reward
             else: 
-                rewards[i] -= honest_comm_reward
+                a.reward -= honest_comm_reward
 
     for i, a in enumerate(agent_list): 
         # reward for sending to all in the first round
-        if a.isByzantine == False and a.buffer.ptr == 0 and 'send_to_all-' in a.actionStr:
-            rewards[i] += params['send_all_first_round_reward']
+        if a.isByzantine == False and curr_sim_len == 1 and 'send_to_all-' in a.actionStr:
+            a.reward += params['send_all_first_round_reward']
 
-        # round length penalties
-        if not a.isByzantine:
-            rewards[i] += params['additional_round_penalty']
+        # round length penalties. dont incur if the agent has committed though. 
+        if type(a.committed_value) is bool and not a.isByzantine:
+            a.reward += params['additional_round_penalty']
         elif a.isByzantine: 
-            rewards[i] -= params['additional_round_penalty']
+            a.reward -= params['additional_round_penalty']
 
-    return rewards, sim_done, satisfied_constraints # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
+    return sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
 
 def getCommReward(params, comm_values, starting_values):
 
@@ -355,12 +353,12 @@ class ConsensusEnv():
         self.honest_oneHotActionMapper = np.eye(honest_action_space_size)
         self.byz_oneHotActionMapper = np.eye(byz_action_space_size)
         
-        stateDims = len(params['commit_vals'])+1 
-        self.local_actions_per_epoch = params['rounds_per_epoch'] // params['ncores']
+        self.stateDims = len(params['commit_vals'])+1 
+        self.local_actions_per_epoch = params['actions_per_epoch'] // params['ncores']
         #self.buffer = PPOBuffer(self.stateDims, 1, local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
-
-        self.honest_buffer = PPOBuffer(stateDims, 1, self.local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
-        self.byz_buffer = PPOBuffer(stateDims, 1, self.local_actions_per_epoch, gamma=params['gamma'], lam=params['lam'])
+        
+        self.honest_buffer = PPOBuffer(self.stateDims, 1, self.local_actions_per_epoch, params['num_agents']-params['num_byzantine'], gamma=params['gamma'], lam=params['lam'])
+        self.byz_buffer = PPOBuffer(self.stateDims, 1, self.local_actions_per_epoch,params['num_byzantine'], gamma=params['gamma'], lam=params['lam'])
         self.majority_agent_buffer = self.byz_buffer if params['num_byzantine'] > (params['num_agents'] - params['num_byzantine']) else self.honest_buffer 
 
         #TODO: Need to call these from params
@@ -450,6 +448,7 @@ class ConsensusEnv():
             a.state = torch.tensor(a.initState).float()
             a.committed_value = False
             a.committed_ptr = False
+            a.reward = 0
         return honest_list, byzantine_list
             
             
@@ -478,7 +477,7 @@ class ConsensusEnv():
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def env_step(self, ep_len, total_ep_rounds):#, honest_logger, byzantine_logger):
+    def env_step(self):#, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
         # anything though as each agent has their own buffer. 
 
@@ -502,68 +501,28 @@ class ConsensusEnv():
             logp_list.append(logp)
             v_list.append(v)
                 
-        # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
-        rewards, sim_done, got_it_right = updateStates(self.params, self.agent_list, self.honest_list)
-
-        #print('actions list', actions_list)
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
-
             # only want to store things if the agent has not committed. 
             if type(agent.committed_value) is bool: 
                 buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
-                buf.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind] )
+                buf.store(ind, agent.state, actions_list[ind], v_list[ind], logp_list[ind] )
 
-            if sim_done:
+        # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
+        sim_done = updateStates(self.params, self.agent_list, self.honest_list, len(self.honest_buffer.temp_buf[0]['obs']))
 
+        for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
+            # only want to store things if the agent has not committed. 
+            if type(agent.committed_value) is bool: 
+                buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
+                buf.store_reward(ind, agent.reward )
 
-            '''
-            #print(total_ep_rounds)
-            #print('agent buffer len', agent.buffer.ptr)
-            #if type(agent.committed_value) is int and type(agent.committed_ptr) is not int:
-                # this is the point that hte agent has committed for the first time. 
-                #agent.committed_ptr = agent.buffer.ptr
-                #agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
-            elif type(agent.committed_value) is int and type(agent.committed_ptr) is int:
-                # store with all blanks. 
-                agent.buffer.store_blank()
-            else: 
-                agent.buffer.store(agent.state, actions_list[ind], rewards[ind], v_list[ind], logp_list[ind])
-            '''
+        if sim_done:
+            # need to wrap up everything in the buffers and compute the rewards 
+            if self.params['num_agents'] - self.params['num_byzantine'] > 0: 
+                self.honest_buffer.finish_sim(self.agent_list)
+            if self.params['num_byzantine']>0:
+                self.byz_buffer.finish_sim(self.agent_list)
 
-            #timeout = ep_len == self.params['max_round_len'] # this episode is going for too long. 
-            #terminal = sim_done or timeout # simulation is naturally done or must be ended as gone too long. 
-            #finish_with_curr_simulation = buf.ptr > env.local_actions_per_epoch  # this is the last simulation 
-
-            #if terminal: # tie off this simulation for this particular agent and start a new one. 
-
-
-            '''if terminal or epoch_ended: # should end for any reason. 
-                if epoch_ended and not(terminal): # cut off early
-                    print( 'episode length is:', ep_len, 'total epoch rounds', total_ep_rounds )
-                    print('Warning: trajectory cut off early by epoch at %d steps.'%ep_len, flush=True)
-                # if trajectory didn't reach terminal state, bootstrap value target
-                if timeout or epoch_ended:
-                    _,_, v = agent.agent_step(self.oneHotStateMapper, curr_temperature) #, device)
-                else:
-                    v = 0
-
-                if got_it_right:
-                    agent.buffer.fix_reward_point(agent.committed_ptr, rewards[ind])
-
-                agent.buffer.finish_path(v) # tie off this path no matter what
-                '''
-                #TODO: fix the logger here. 
-                # if terminal:
-                    # only save EpRet / EpLen if trajectory finished
-                #    logger.store(EpRet=ep_ret, EpLen=ep_len)
-                #o, ep_ret, ep_len = env.reset(), 0, 0 # reset the environment
-                
-                #termination_list.append(1)
-
-        '''end_sim =False
-        if sum(termination_list) == num_agents or honestPartiesCommit(honest_list):
-            end_sim=True'''
-        ### what v are we actually returning here?
         return sim_done
 
     def render(self,  mode='human', close=False):
@@ -580,7 +539,7 @@ class PPOBuffer:
     act_dim: actions
     """
 
-    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
+    def __init__(self, obs_dim, act_dim, size, num_agents, gamma=0.99, lam=0.95):
         self.obs_buf = [] #np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
         self.act_buf = [] #np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
         self.adv_buf = [] #np.zeros(size, dtype=np.float32)
@@ -590,30 +549,26 @@ class PPOBuffer:
         self.logp_buf = [] #np.zeros(size, dtype=np.float32)
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
+        self.num_agents = num_agents
 
-    def fix_reward_point(self, committed_ptr, reward):
-        # bring the reward back in time to when the 
-        
-        if committed_ptr != self.ptr: # else no need to adjust this. 
-            self.rew_buf[committed_ptr] = reward
-    
-    def store_blank(self):
-        assert self.ptr < self.max_size  
-        self.ptr += 1
+        # temp dict to compute everything for each agent. 
+        store_dict = {'obs':[], 'act':[], 
+        'rew':[], 'val':[], 'logp':[] }
+        self.temp_buf = {i:copy.deepcopy(store_dict) for i in range(self.num_agents)}
 
-    def store(self, obs, act, rew, val, logp):
+    def store(self, agent_ind, obs, act, val, logp):
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
+        self.temp_buf[agent_ind]['obs'].append(obs.numpy())
+        self.temp_buf[agent_ind]['act'].append(act)
+        self.temp_buf[agent_ind]['val'].append(val)
+        self.temp_buf[agent_ind]['logp'].append(logp)
 
-        self.obs_buf.append(obs)
-        self.act_buf.append(act)
-        self.rew_buf.append(rew) # the actual reward recieved. 
-        self.val_buf.append(val) # the value function estimate. 
-        self.logp_buf.append(logp)
-        self.ptr += 1
+    def store_reward(self, agent_ind, rew):
+        self.temp_buf[agent_ind]['rew'].append(rew)
 
-    def finish_path(self, last_val=0):
+    def finish_sim(self, agent_list):
         """
         Call this at the end of a trajectory, or when one gets cut off
         by an epoch ending. This looks back in the buffer to where the
@@ -628,21 +583,32 @@ class PPOBuffer:
         This allows us to bootstrap the reward-to-go calculation to account
         for timesteps beyond the arbitrary episode horizon (or epoch cutoff).
         """
+        
+        for ind, agent in enumerate(agent_list): # indices and dictionaries for each agent. 
+            store_dic = self.temp_buf[ind]
+            store_dic['rew'].append(agent.reward)
+            store_dic['val'].append(agent.reward)
+            rews = np.asarray(store_dic['rew']) # adding the very last value. 
+            vals = np.asarray(store_dic['val'])
+            
+            # the next two lines implement GAE-Lambda advantage calculation.
+            # this is much more sophisticated than the basic advantage equation. 
+            deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
+            adv = core.discount_cumsum(deltas, self.gamma * self.lam)
+            
+            # the next line computes rewards-to-go, to be targets for the value function
+            ret = core.discount_cumsum(rews, self.gamma)[:-1]
+            
+            self.obs_buf+= store_dic['obs']
+            self.act_buf+= store_dic['act']
+            self.rew_buf+= store_dic['rew'] # the actual reward recieved. 
+            self.val_buf+= store_dic['val'] # the value function estimate. 
+            self.logp_buf+= store_dic['logp']
+            self.adv_buf += adv.tolist()
+            self.ret_buf += ret.tolist()
+            self.ptr += len(store_dic['obs']) # number of new observations added here. 
 
-        path_slice = slice(self.path_start_idx, self.ptr)
-        #print(' values to try and add', self.rew_buf[path_slice], last_val)
-        rews = np.append(self.rew_buf[path_slice], last_val) # adding the very last value. 
-        vals = np.append(self.val_buf[path_slice], last_val)
-        
-        # the next two lines implement GAE-Lambda advantage calculation.
-        # this is much more sophisticated than the basic advantage equation. 
-        deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
-        self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
-        
-        # the next line computes rewards-to-go, to be targets for the value function
-        self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
-        
-        self.path_start_idx = self.ptr # making the new start point to add another new simulation in at the end!
+            #print('finish path data', self.obs_buf, self.ptr)
 
     def get(self):
         """
@@ -654,15 +620,38 @@ class PPOBuffer:
         #convert all to numpy array and then torch. 
         self.obs_buf = np.asarray(self.obs_buf)
         self.act_buf = np.asarray(self.act_buf) 
-        self.rew_buf = np.asarray(self.rew_bef) # the actual reward recieved. 
+        self.rew_buf = np.asarray(self.rew_buf) # the actual reward recieved. 
         self.val_buf = np.asarray(self.val_buf) # the value function estimate. 
         self.logp_buf = np.asarray(self.logp_buf)
+        self.adv_buf = np.asarray(self.adv_buf)
+
+        #print('advantage buffer', self.adv_buf, type(self.adv_buf))
 
         # the next two lines implement the advantage normalization trick
         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     adv=self.adv_buf, logp=self.logp_buf)
+
+        #print('before the reset', data['obs'])
+        
+        # can now wipe the buffer? 
+        self.obs_buf = [] #np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = [] #np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
+        self.adv_buf = [] #np.zeros(size, dtype=np.float32)
+        self.rew_buf = [] #np.zeros(size, dtype=np.float32)
+        self.ret_buf = [] #np.zeros(size, dtype=np.float32)
+        self.val_buf = [] #np.zeros(size, dtype=np.float32)
+        self.logp_buf = [] #np.zeros(size, dtype=np.float32)
+        self.ptr, self.path_start_idx = 0, 0
+
+        # temp dict to compute everything for each agent. 
+        store_dict = {'obs':[], 'act':[], 
+        'rew':[], 'val':[], 'logp':[] }
+        self.temp_buf = {i:copy.deepcopy(store_dict) for i in range(self.num_agents)}
+
+        #print('after the reset', data['obs'])
+
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
 
         '''# TODO: find a way to store this so dont have to do this every time it is called in the loss update!!
@@ -675,8 +664,9 @@ class PPOBuffer:
                     adv=self.adv_buf, logp=self.logp_buf)
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
         '''
-    def reset(self):
-        self.ptr, self.path_start_idx = 0, 0
+
+    '''def reset(self):
+        self.ptr, self.path_start_idx = 0, 0'''
 
 if __name__=='__main__':
     print(torch.tensor([5,4,3,2]))
