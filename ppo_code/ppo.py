@@ -253,6 +253,8 @@ def ppo_algo(env, seed=0,
 
     local_actions_per_epoch = env.local_actions_per_epoch
     
+    print(' local actions per epoch', local_actions_per_epoch)
+
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         sim_done = False
@@ -270,7 +272,8 @@ def ppo_algo(env, seed=0,
 
             #print('finished simulation', t)
 
-        print('======= end of simulations for epoch:', epoch+1)
+        if epoch+1 % 5==0:
+            print('======= end of simulations for epoch:', epoch+1)
 
         # TODO: get model save working. 
         # Save model
