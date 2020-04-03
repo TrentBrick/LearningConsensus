@@ -523,7 +523,12 @@ class ConsensusEnv():
             if self.params['num_byzantine']>0:
                 self.byz_buffer.finish_sim(self.agent_list)
 
-        return sim_done
+        ##Get average v value to input into log
+        v = 0
+        for val in v_list:
+            if val is not None:
+                v+=val
+        return sim_done, val
 
     def render(self,  mode='human', close=False):
         print("This is a test of rendering the environment ")

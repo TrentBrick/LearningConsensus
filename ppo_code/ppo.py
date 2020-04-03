@@ -121,9 +121,9 @@ def ppo_algo(env, seed=0,
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    '''honest_logger = EpochLogger(**logger_kwargs)
-    honest_logger.save_config(locals())
-    byzantine_logger = EpochLogger(**logger_kwargs)
+    honest_logger = EpochLogger(**logger_kwargs)
+    #honest_logger.save_config(locals())
+    '''byzantine_logger = EpochLogger(**logger_kwargs)
     byzantine_logger.save_config(locals())'''
     #logger = EpochLogger(**logger_kwargs)
     #logger.save_config(locals())
@@ -152,9 +152,9 @@ def ppo_algo(env, seed=0,
     # Count variables
     var_counts = tuple(core.count_vars(module) for module in [env.honest_policy, env.byz_policy, 
                                                             env.honest_v_function, env.byz_v_function])
-    #logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
+    # honest_logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
-    # Set up experience buffer
+    # Set up experience buffer - This is done in consensus_env.py
     #simulations_per_epoch = int(actions_per_epoch / num_procs()) # how do local steps fill up the buffer??
     #buf = PPOBuffer(env.stateDims, 1, simulations_per_epoch, gamma=params['gamma'], lam=params['lam'])
     
@@ -204,9 +204,8 @@ def ppo_algo(env, seed=0,
 
     # Set up model saving
     # TODO: find a way to log both of the neural networks. 
-    ###Idea - create two logger classes - let's just focus on building this out for honest now ###
     #byzantine_logger.setup_pytorch_saver(env.byz_policy)
-    #honest_logger.setup_pytorch_saver(env.honest_policy)
+    honest_logger.setup_pytorch_saver(env.honest_policy)
 
     def update(buf, nn, vf, pi_optimizer, vf_optimizer, stateDims):
         data = buf.get()
@@ -223,13 +222,13 @@ def ppo_algo(env, seed=0,
             loss_pi, pi_info = compute_loss_pi(data, nn, stateDims)
             kl = mpi_avg(pi_info['kl'])
             if kl > 1.5 * target_kl:
-                #logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                honest_logger.log('Early stopping at step %d due to reaching max kl.'%i)
                 break
             loss_pi.backward()
             mpi_avg_grads(nn)    # average grads across MPI processes
             pi_optimizer.step()
 
-        #logger.store(StopIter=i)
+        honest_logger.store(StopIter=i)
 
         # Value function learning
         for i in range(train_v_iters):
@@ -239,12 +238,12 @@ def ppo_algo(env, seed=0,
             mpi_avg_grads(vf)    # average grads across MPI processes
             vf_optimizer.step()
 
-        '''# Log changes from update
+        # Log changes from update
         kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
-        logger.store(LossPi=pi_l_old, LossV=v_l_old,
+        honest_logger.store(LossPi=pi_l_old, LossV=v_l_old,
                      KL=kl, Entropy=ent, ClipFrac=cf,
                      DeltaLossPi=(loss_pi.item() - pi_l_old),
-                     DeltaLossV=(loss_v.item() - v_l_old))'''
+                     DeltaLossV=(loss_v.item() - v_l_old))
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -262,8 +261,8 @@ def ppo_algo(env, seed=0,
      
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            sim_done = env.env_step()#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
-
+            sim_done, v = env.env_step()#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            honest_logger.store(VVals=v)
             if sim_done:
                 #for a in env.honest_list: 
                     #print(a.actionStr, a.committed_value)
@@ -278,7 +277,7 @@ def ppo_algo(env, seed=0,
         # TODO: get model save working. 
         # Save model
         #if (epoch % save_freq == 0) or (epoch == epochs-1):
-        #    logger.save_state({'env': env}, None)
+            #logger.save_state({'env': env}, None)
 
         # Perform PPO update!
         if env.params['num_agents'] - env.params['num_byzantine'] > 0: 
@@ -308,22 +307,22 @@ def ppo_algo(env, seed=0,
             byzantine_logger.log_tabular('StopIter', average_only=True)
             byzantine_logger.log_tabular('Time', time.time()-start_time)
             byzantine_logger.dump_tabular()
-        else:
-            honest_logger.log_tabular('Epoch', epoch)
-            honest_logger.log_tabular('EpRet', with_min_and_max=True)
-            honest_logger.log_tabular('EpLen', average_only=True)
-            honest_logger.log_tabular('VVals', with_min_and_max=True)
-            honest_logger.log_tabular('TotalEnvInteracts', (epoch+1)*actions_per_epoch)
-            honest_logger.log_tabular('LossPi', average_only=True)
-            honest_logger.log_tabular('LossV', average_only=True)
-            honest_logger.log_tabular('DeltaLossPi', average_only=True)
-            honest_logger.log_tabular('DeltaLossV', average_only=True)
-            honest_logger.log_tabular('Entropy', average_only=True)
-            honest_logger.log_tabular('KL', average_only=True)
-            honest_logger.log_tabular('ClipFrac', average_only=True)
-            honest_logger.log_tabular('StopIter', average_only=True)
-            honest_logger.log_tabular('Time', time.time()-start_time)
-            honest_logger.dump_tabular()'''
+        else:'''
+        honest_logger.log_tabular('Epoch', epoch)
+        #honest_logger.log_tabular('EpRet', with_min_and_max=True)
+        #honest_logger.log_tabular('EpLen', average_only=True)
+        honest_logger.log_tabular('VVals', with_min_and_max=True)
+        honest_logger.log_tabular('TotalEnvInteracts', (epoch+1)*actions_per_epoch)
+        honest_logger.log_tabular('LossPi', average_only=True)
+        honest_logger.log_tabular('LossV', average_only=True)
+        honest_logger.log_tabular('DeltaLossPi', average_only=True)
+        honest_logger.log_tabular('DeltaLossV', average_only=True)
+        honest_logger.log_tabular('Entropy', average_only=True)
+        honest_logger.log_tabular('KL', average_only=True)
+        honest_logger.log_tabular('ClipFrac', average_only=True)
+        honest_logger.log_tabular('StopIter', average_only=True)
+        honest_logger.log_tabular('Time', time.time()-start_time)
+        honest_logger.dump_tabular()
 
         # need to reset the agents and whole environment between epochs. 
         o, ep_ret, ep_len = env.reset(), 0, 0
