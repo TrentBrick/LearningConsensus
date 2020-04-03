@@ -518,7 +518,7 @@ class ConsensusEnv():
 
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
             ## Update trajectory log for printing
-            single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append((len(self.honest_buffer.temp_buf[0]['obs']), agent.state, actions_list[ind], logp_list[ind]))
+            single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append((len(self.honest_buffer.temp_buf[0]['obs']), agent.state, agent.actionSpace[actions_list[ind]]))
 
             # only want to store things if the agent has not committed. 
             if type(agent.committed_value) is bool: 
