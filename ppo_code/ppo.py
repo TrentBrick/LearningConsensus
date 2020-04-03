@@ -13,7 +13,7 @@ from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_sc
 def ppo_algo(env, seed=0, 
         actions_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=5):
     """f
     Proximal Policy Optimization (by clipping), 
 
@@ -257,16 +257,20 @@ def ppo_algo(env, seed=0,
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         sim_done = False
-        while env.majority_agent_buffer.ptr < local_actions_per_epoch and not sim_done:
-     
+        curr_ep_trajectory_logs = []
+        single_run_trajectory_log = setup_trajectory_log(env)
+        while env.majority_agent_buffer.ptr < local_actions_per_epoch and not sim_done:     
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            sim_done, v = env.env_step()#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            sim_done, v, trajectory_log = env.env_step(single_run_trajectory_log)#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            single_run_trajectory_log = trajectory_log
             honest_logger.store(VVals=v)
             if sim_done:
                 #for a in env.honest_list: 
                     #print(a.actionStr, a.committed_value)
                 #print('========')
+                curr_ep_trajectory_logs.append(single_run_trajectory_log)
+                single_run_trajectory_log = setup_trajectory_log(env)
                 o, ep_ret, ep_len = env.resetStatesandAgents(), 0, 0 # reset the environment
 
             #print('finished simulation', t)
@@ -308,6 +312,14 @@ def ppo_algo(env, seed=0,
             byzantine_logger.log_tabular('Time', time.time()-start_time)
             byzantine_logger.dump_tabular()
         else:'''
+        if (epoch % save_freq == 0) or (epoch == epochs-1):
+            print('=============================')
+            print('last trajectory from this epoch:')
+            for k, v in curr_ep_trajectory_logs[-1].items():
+                print(k, v)
+                print('---------')
+            print('=============================')
+
         honest_logger.log_tabular('Epoch', epoch)
         #honest_logger.log_tabular('EpRet', with_min_and_max=True)
         #honest_logger.log_tabular('EpLen', average_only=True)
@@ -350,3 +362,8 @@ def ppo_algo(env, seed=0,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, actions_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs)'''
+def setup_trajectory_log(env):
+    single_run_trajectory_log = dict()
+    for agent in env.agent_list:
+        single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)] = []
+    return single_run_trajectory_log
