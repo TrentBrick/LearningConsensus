@@ -39,8 +39,8 @@ def initialize_parameters():
     
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
-    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [200], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [1000], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [1000], help='number of protocol simulations per epoch')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [50], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -73,7 +73,7 @@ def initialize_parameters():
     parser.add_argument("--majority_violation", action ='store', type=float, default = [-1.0], nargs='+')
     parser.add_argument("--correct_commit", action ='store', type=float, default = [1], nargs='+')
     parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.03], nargs='+')
-    parser.add_argument("--termination_penalty", action ='store', type=float, default = [-3.0], nargs='+')
+    parser.add_argument("--termination_penalty", action ='store', type=float, default = [-.0], nargs='+')
 
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.distributions.categorical import Categorical
 from nn import *
+from ppo_code.core import *
 import matplotlib.pyplot as plt
 import spinup.algos.pytorch.ppo.core as core
 import itertools
@@ -195,7 +196,8 @@ class Agent:
         #print(real_logprobs)
         #should be able to apply sampling without computing this twice... 
         temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=1) 
-        
+        # print("temperature: " + str(temperature))
+        # print("temperature probs: " + str(temperature_probs))
         action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
         
         #print('printing these shapes', oh.shape, logits.shape, action_ind.shape, action_ind)
@@ -349,11 +351,12 @@ class ConsensusEnv():
         else: 
             state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
 
+        #self.actor_critic = MLPActorCritic(, honest_action_space)
         self.honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
         self.byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
 
         self.honest_optimizer = torch.optim.Adam(self.honest_policy.parameters(), lr=params['learning_rate'])
-        self.byz_optimizer = torch.optim.Adam(self.byz_policy.parameters(), lr=params['learning_rate'])
+        # self.byz_optimizer = torch.optim.Adam(self.byz_policy.parameters(), lr=params['learning_rate'])
 
         self.oneHotStateMapper = np.eye(len(params['commit_vals'])+1) # number of unique values that can be in the state. 
         self.honest_oneHotActionMapper = np.eye(honest_action_space_size)
