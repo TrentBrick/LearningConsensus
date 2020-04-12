@@ -557,7 +557,7 @@ class PPOBuffer:
     obs_dim: dimension of obs
     act_dim: actions
     """
-self.honest_buffer = PPOBuffer(self.stateDims, 1, self.local_actions_per_epoch, params['num_agents']-params['num_byzantine'], gamma=params['gamma'], lam=params['lam'])
+    # self.honest_buffer = PPOBuffer(self.stateDims, 1, self.local_actions_per_epoch, params['num_agents']-params['num_byzantine'], gamma=params['gamma'], lam=params['lam'])
 
     def __init__(self, obs_dim, act_dim, size, num_agents, gamma=0.99, lam=0.95):
         self.obs_buf = [] #np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)

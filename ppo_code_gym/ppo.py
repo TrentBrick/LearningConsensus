@@ -85,7 +85,7 @@ class PPOBuffer:
 
 
 
-def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, honest_logger_kwargs=dict(), save_freq=10):
@@ -271,6 +271,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
+        round_len = 1
         for t in range(local_steps_per_epoch):
             actions_list = []
             v_list = []
@@ -281,7 +282,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 v_list.append(v)
                 logp_list.append(logp)
 
-            next_o_list, r_list, d_list, info_n_list, sim_done = env.step(actions_list, t)
+            next_o_list, r_list, d_list, info_n_list, sim_done = env.step(actions_list, round_len)
             ep_ret += sum(r_list)
             ep_len += 1
 
@@ -322,6 +323,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     # only save EpRet / EpLen if trajectory finished
                     honest_logger.store(EpRet=ep_ret, EpLen=ep_len)
                 o_list, ep_ret, ep_len = env.reset(), 0, 0
+                round_len=0
+
+            round_len+=1
 
 
         # Save model

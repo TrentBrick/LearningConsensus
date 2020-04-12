@@ -42,7 +42,8 @@ class Honest_Agent:
 #multi-agent world
 class World(object):
     
-    def __init__(self):
+    def __init__(self, params):
+        self.params = params
         self.agents = []
         ##TODO: might need to add some dimensions for action spaces here
     
@@ -67,7 +68,7 @@ class World(object):
         for actor in agent_list:
             if agent.agentID == actor.agentID:
                 continue
-            new_state.append(actionEffect(params, actor.actionStr, actor.initVal, agent.state[actor_ind], actor.agentId))
+            new_state.append(actionEffect(self.params, actor.actionStr, actor.initVal, agent.state[actor_ind], actor.agentId))
             actor_ind +=1
         agent.state = torch.tensor(new_state).uint8()
 
