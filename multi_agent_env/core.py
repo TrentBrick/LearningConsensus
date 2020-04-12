@@ -23,8 +23,8 @@ class Honest_Agent:
         self.state = self.initAgentState(params, init_val, give_inits)
         self.committed_value = False
 
-        self.action = None
-        self.actionStr = ""
+        self.actionIndex = None
+        self.actionString = ""
 
         # can use this to create agents that don't react to the policy
         self.action_callback = None
@@ -33,7 +33,7 @@ class Honest_Agent:
         initState = [init_val]
         for a in range(params['num_agents']-1):
             initState.append(params['null_message_val'])
-        return torch.tensor(initState).float()
+        return torch.tensor(initState).uint8()
 
     def getHonestActionSpace(params):
         honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
@@ -65,11 +65,11 @@ class World(object):
         actor_ind = 1
         new_state = [agent.initVal] # keep track of the agent's initial value
         for actor in agent_list:
-            if agent.agenID == actor.agentId:
+            if agent.agentID == actor.agentID:
                 continue
             new_state.append(actionEffect(params, actor.actionStr, actor.initVal, agent.state[actor_ind], actor.agentId))
             actor_ind +=1
-        agent.state = torch.tensor(new_state).float()
+        agent.state = torch.tensor(new_state).uint8()
 
 
 

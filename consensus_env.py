@@ -188,7 +188,9 @@ class Agent:
         return torch.tensor(initState).float()
 
     def runNeuralNets(self, oneHotStateMapper, temperature):
-        oh = onehotter(self.state.unsqueeze(0), self.stateDims) # each column is one of the states. 
+        oh = onehotter(self.state.unsqueeze(0), self.stateDims) # each column is one of the states.
+        print("oh: ")
+        print(oh) 
         #making a decision:
         logits = self.brain(oh)
         #log_probs = Categorical(logits=logits).log_prob()
@@ -349,7 +351,7 @@ class ConsensusEnv():
         if params['use_PKI']: 
             state_oh_size = (len(params['commit_vals'])+1)*(params['num_agents']**2-params['num_agents']+1)
         else: 
-            state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
+            state_oh_size = (len(['commit_vals'])+1)*params['num_agents']
 
         #self.actor_critic = MLPActorCritic(, honest_action_space)
         self.honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
@@ -555,6 +557,7 @@ class PPOBuffer:
     obs_dim: dimension of obs
     act_dim: actions
     """
+self.honest_buffer = PPOBuffer(self.stateDims, 1, self.local_actions_per_epoch, params['num_agents']-params['num_byzantine'], gamma=params['gamma'], lam=params['lam'])
 
     def __init__(self, obs_dim, act_dim, size, num_agents, gamma=0.99, lam=0.95):
         self.obs_buf = [] #np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)

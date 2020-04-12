@@ -2,16 +2,12 @@ import gym
 from gym import spaces
 from gym.envs.registration import EnvSpec
 import numpy as np
-from multiagent.multi_discrete import MultiDiscrete
+# from multiagent.multi_discrete import MultiDiscrete
 from multi_utils import MultiAgentActionSpace, MultiAgentObservationSpace
 
 # environment for all agents in the multiagent world
 # currently code assumes that no agents will be created/destroyed at runtime!
 class MultiAgentEnv(gym.Env):
-    metadata = {
-        'render.modes' : ['human', 'rgb_array']
-    }
-
     def __init__(self, params, world, reset_callback=None, reward_callback=None,
                  observation_callback=None, info_callback=None,
                  done_callback=None, shared_viewer=True):
@@ -38,13 +34,16 @@ class MultiAgentEnv(gym.Env):
         self.time = 0
 
         # configure action space for each agent
-        self.action_space = MultiAgentActionSpace([spaces.Discrete(self.agents[0].actionDims) for _ in range(n)])
+        self.action_space = MultiAgentActionSpace([spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
         # configure observation space
-        self.observation_space = []
-        for agent in self.agents:
-            # May be useful to have this because agents could have different state sizes in the future
-            obs_dim = len(observation_callback(agent, self.world))
-            self.observation_space.append(spaces.Box())
+        self.observation_space = MultiAgentObservationSpace([spaces.Box(low=0, high=2, obs_dim=(self.n,), dtype=np.uint8) for _in range(self.n)])
+        # self.observation_space = []
+        # for agent in self.agents:
+        #     # May be useful to have this because agents could have different state sizes in the future
+        #     obs_dim = len(observation_callback(agent, self.world))
+        #     self.observation_space.append(spaces.Box(low=0, high=2 shape=(obs_dim,), dtype=np.uint8)
+
+        ###############################
         # for agent in self.agents:
         #     total_action_space = []
         #     # physical action space
@@ -83,6 +82,7 @@ class MultiAgentEnv(gym.Env):
         # else:
         #     self.viewers = [None] * self.n
         # self._reset_render()
+        ###################################
 
     def step(self, action_n, curr_sim_len):
         obs_n = []
@@ -119,7 +119,7 @@ class MultiAgentEnv(gym.Env):
         self.agents = self.world.policy_agents
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
-        return obs_n
+        return obs_n    
 
     # get info used for benchmarking
     def _get_info(self, agent):
@@ -143,56 +143,13 @@ class MultiAgentEnv(gym.Env):
         return self.reward_callback(self.params, curr_sim_len, self.world)
 
     # set env action for a particular agent - this still needs to be configured
-    def _set_action(self, action, agent, action_space, time=None):
-
-        agent.action.u = np.zeros(self.world.dim_p)
-        agent.action.c = np.zeros(self.world.dim_c)
-        # process action
-        if isinstance(action_space, MultiDiscrete):
-            act = []
-            size = action_space.high - action_space.low + 1
-            index = 0
-            for s in size:
-                act.append(action[index:(index+s)])
-                index += s
-            action = act
-        else:
-            action = [action]
-
-        if agent.movable:
-            # physical action
-            if self.discrete_action_input:
-                agent.action.u = np.zeros(self.world.dim_p)
-                # process discrete action
-                if action[0] == 1: agent.action.u[0] = -1.0
-                if action[0] == 2: agent.action.u[0] = +1.0
-                if action[0] == 3: agent.action.u[1] = -1.0
-                if action[0] == 4: agent.action.u[1] = +1.0
-            else:
-                if self.force_discrete_action:
-                    d = np.argmax(action[0])
-                    action[0][:] = 0.0
-                    action[0][d] = 1.0
-                if self.discrete_action_space:
-                    agent.action.u[0] += action[0][1] - action[0][2]
-                    agent.action.u[1] += action[0][3] - action[0][4]
-                else:
-                    agent.action.u = action[0]
-            sensitivity = 5.0
-            if agent.accel is not None:
-                sensitivity = agent.accel
-            agent.action.u *= sensitivity
-            action = action[1:]
-        if not agent.silent:
-            # communication action
-            if self.discrete_action_input:
-                agent.action.c = np.zeros(self.world.dim_c)
-                agent.action.c[action[0]] = 1.0
-            else:
-                agent.action.c = action[0]
-            action = action[1:]
-        # make sure we used all elements of action
-        assert len(action) == 0
+    def _set_action(self, action_index, agent):
+        agent.actionIndex = action_index
+        agent.actionString = agent.actionSpace[action_index
+        
+        ###If commit in agents action space, then commit
+        if 'commit' in self.actionStr:
+            self.committed_value = int(self.actionStr.split('_')[1])
 
     # reset rendering assets
     # def _reset_render(self):
