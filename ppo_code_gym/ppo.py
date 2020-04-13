@@ -3,7 +3,7 @@ import torch
 from torch.optim import Adam
 import gym
 import time
-import spinup.algos.pytorch.ppo.core as core
+import ppo_code_gym.core as core
 from consensus_env import onehotter
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
@@ -85,7 +85,7 @@ class PPOBuffer:
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
 
 
-
+# TODO: make the hidden sizes updatable through run.py. 
 def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
@@ -181,13 +181,17 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
     # Instantiate environment
     env = env_fn
+    #TODO: this only works for all honest agents. 
     obs_dim = env.observation_space[0].shape #Take first element b/c all of them have the same size
     act_dim = env.action_space[0].shape #Take first element b/c all have the same size
 
     # Create actor-critic module
     #TODO: using the first part
+    # TODO: only works for all honest. 
+    # box then discrete. What is .n here? 
+    #print('makign the actor critics. ', actor_critic)
     ac = actor_critic(env.observation_space[0], env.action_space[0], **ac_kwargs)
-
+    #print('made the actor critics. ')
     # Sync params across processes
     sync_params(ac)
 
@@ -208,7 +212,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         pi, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         # print("logp: ", len(logp))
-        # print("logp_old: ", len(logp_old))
+        print("compute loss sizes of evertyhing", obs.shape, act.shape, adv.shape, logp_old.shape)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
@@ -252,6 +256,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             mpi_avg_grads(ac.pi)    # average grads across MPI processes
             pi_optimizer.step()
 
+        # TODO: need this logger to correspond to our actual training system. 
         honest_logger.store(StopIter=i)
 
         # Value function learning

@@ -26,6 +26,7 @@ class Scenario(BaseScenario):
 
     # Return all honest agents
     def get_agents(self, world):
+        # TODO: why is this needed? is world agents not already a list? 
         return [agent for agent in world.agents]
 
     def reward(self, params, curr_sim_len, world):

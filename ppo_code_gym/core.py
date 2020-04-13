@@ -115,6 +115,7 @@ class MLPActorCritic(nn.Module):
         obs_dim = observation_space.shape[0]
 
         # policy builder depends on action space
+        #print('making the actor critics, what is action space n?  ', action_space.n, action_space, flush=True)
         if isinstance(action_space, Box):
             self.pi = MLPGaussianActor(obs_dim, action_space.shape[0], hidden_sizes, activation)
         elif isinstance(action_space, Discrete):

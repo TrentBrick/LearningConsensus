@@ -7,8 +7,9 @@ import torch
 #import main
 import pandas as pd
 #import gym 
-import consensus_env
-import ppo_code.ppo as ppo
+# TODO: can you delete all of the no longer needed files? 
+#import consensus_env
+#import ppo_code.ppo as ppo
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from multiagent.make_env import make_env

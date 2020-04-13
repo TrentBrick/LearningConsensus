@@ -34,7 +34,10 @@ class MultiAgentEnv(gym.Env):
         self.time = 0
 
         # configure action space and observation for each agent - using MultiAgentUtils
+        # TODO: does this work for Byzantine agents? they have a different sized action space. 
+        # TODO: why is this a list with all the vectors for all the agents? 
         self.action_space = MultiAgentActionSpace([spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
+        # each agent has a vector of ints for the actions of themself and all other agents. it is in an int but call Box not discrete?? 
         self.observation_space = MultiAgentObservationSpace([spaces.Box(0, 2, (self.n,), dtype=np.uint8) for _ in range(self.n)])
         
         # self.observation_space = []
@@ -166,6 +169,8 @@ class MultiAgentEnv(gym.Env):
 # vectorized wrapper for a batch of multi-agent environments - can maybe use this for just honest agents
 # assumes all environments have the same observation and action space
 class BatchMultiAgentEnv(gym.Env):
+
+    # TODO: should these be here? what does human render mean? 
     metadata = {
         'runtime.vectorized': True,
         'render.modes' : ['human', 'rgb_array']
