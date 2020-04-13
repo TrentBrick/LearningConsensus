@@ -33,15 +33,17 @@ class MultiAgentEnv(gym.Env):
         self.shared_reward = world.collaborative if hasattr(world, 'collaborative') else False
         self.time = 0
 
-        # configure action space for each agent
+        # configure action space and observation for each agent - using MultiAgentUtils
         self.action_space = MultiAgentActionSpace([spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
-        # configure observation space
         self.observation_space = MultiAgentObservationSpace([spaces.Box(0, 2, (self.n,), dtype=np.uint8) for _ in range(self.n)])
+        
         # self.observation_space = []
+        # self.action_space = []
         # for agent in self.agents:
         #     # May be useful to have this because agents could have different state sizes in the future
         #     obs_dim = len(observation_callback(agent, self.world))
-        #     self.observation_space.append(spaces.Box(low=0, high=2 shape=(obs_dim,), dtype=np.uint8)
+        #     self.observation_space.append(spaces.Box(low=0, high=2, shape=(obs_dim,), dtype=np.uint8))
+        #     self.action_space.append(spaces.Discrete(self.agents[0].actionDims))
 
         ###############################
         # for agent in self.agents:

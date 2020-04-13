@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from torch.distributions.categorical import Categorical
 from nn import *
-from ppo_code.core import *
 import matplotlib.pyplot as plt
 import spinup.algos.pytorch.ppo.core as core
 import itertools
@@ -188,9 +187,7 @@ class Agent:
         return torch.tensor(initState).float()
 
     def runNeuralNets(self, oneHotStateMapper, temperature):
-        oh = onehotter(self.state.unsqueeze(0), self.stateDims) # each column is one of the states.
-        print("oh: ")
-        print(oh) 
+        oh = onehotter(self.state.unsqueeze(0), self.stateDims) # each column is one of the states. 
         #making a decision:
         logits = self.brain(oh)
         #log_probs = Categorical(logits=logits).log_prob()
@@ -198,8 +195,7 @@ class Agent:
         #print(real_logprobs)
         #should be able to apply sampling without computing this twice... 
         temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=1) 
-        # print("temperature: " + str(temperature))
-        # print("temperature probs: " + str(temperature_probs))
+        
         action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
         
         #print('printing these shapes', oh.shape, logits.shape, action_ind.shape, action_ind)
@@ -351,14 +347,13 @@ class ConsensusEnv():
         if params['use_PKI']: 
             state_oh_size = (len(params['commit_vals'])+1)*(params['num_agents']**2-params['num_agents']+1)
         else: 
-            state_oh_size = (len(['commit_vals'])+1)*params['num_agents']
+            state_oh_size = (len(params['commit_vals'])+1)*params['num_agents']
 
-        #self.actor_critic = MLPActorCritic(, honest_action_space)
         self.honest_policy = BasicPolicy(honest_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
         self.byz_policy = BasicPolicy(byz_action_space_size, state_oh_size, params['hidden_sizes'], params['activation'], params['output_activation'], params['use_bias'])#.to(params['device'])
 
         self.honest_optimizer = torch.optim.Adam(self.honest_policy.parameters(), lr=params['learning_rate'])
-        # self.byz_optimizer = torch.optim.Adam(self.byz_policy.parameters(), lr=params['learning_rate'])
+        self.byz_optimizer = torch.optim.Adam(self.byz_policy.parameters(), lr=params['learning_rate'])
 
         self.oneHotStateMapper = np.eye(len(params['commit_vals'])+1) # number of unique values that can be in the state. 
         self.honest_oneHotActionMapper = np.eye(honest_action_space_size)
@@ -557,7 +552,6 @@ class PPOBuffer:
     obs_dim: dimension of obs
     act_dim: actions
     """
-    # self.honest_buffer = PPOBuffer(self.stateDims, 1, self.local_actions_per_epoch, params['num_agents']-params['num_byzantine'], gamma=params['gamma'], lam=params['lam'])
 
     def __init__(self, obs_dim, act_dim, size, num_agents, gamma=0.99, lam=0.95):
         self.obs_buf = [] #np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
@@ -596,7 +590,6 @@ class PPOBuffer:
         the whole trajectory to compute advantage estimates with GAE-Lambda,
         as well as compute the rewards-to-go for each state, to use as
         the targets for the value function.
-
         The "last_val" argument should be 0 if the trajectory ended
         because the agent reached a terminal state (died), and otherwise
         should be V(s_T), the value function estimated for the last state.
@@ -695,5 +688,3 @@ if __name__=='__main__':
     print(ugh.argmax(-1))
     print(onehotter(ugh.argmax(-1), 10))
     print(onehotter(ugh.argmax(-1), 10).flatten())
-
-

@@ -16,18 +16,14 @@ def ppo_algo(env, seed=0,
         target_kl=0.01, logger_kwargs=dict(), save_freq=5):
     """f
     Proximal Policy Optimization (by clipping), 
-
     with early stopping based on approximate KL
-
     Args:
         env_fn : A function which creates a copy of the environment.
             The environment must satisfy the OpenAI Gym API.
-
         actor_critic: The constructor method for a PyTorch Module with a 
             ``step`` method, an ``act`` method, a ``pi`` module, and a ``v`` 
             module. The ``step`` method should accept a batch of observations 
             and return:
-
             ===========  ================  ======================================
             Symbol       Shape             Description
             ===========  ================  ======================================
@@ -38,12 +34,9 @@ def ppo_algo(env, seed=0,
             ``logp_a``   (batch,)          | Numpy array of log probs for the
                                            | actions in ``a``.
             ===========  ================  ======================================
-
             The ``act`` method behaves the same as ``step`` but only returns ``a``.
-
             The ``pi`` module's forward call should accept a batch of 
             observations and optionally a batch of actions, and return:
-
             ===========  ================  ======================================
             Symbol       Shape             Description
             ===========  ================  ======================================
@@ -57,10 +50,8 @@ def ppo_algo(env, seed=0,
                                            | If actions not given, will contain
                                            | ``None``.
             ===========  ================  ======================================
-
             The ``v`` module's forward call should accept a batch of observations
             and return:
-
             ===========  ================  ======================================
             Symbol       Shape             Description
             ===========  ================  ======================================
@@ -68,53 +59,36 @@ def ppo_algo(env, seed=0,
                                            | for the provided observations. (Critical: 
                                            | make sure to flatten this!)
             ===========  ================  ======================================
-
-
         ac_kwargs (dict): Any kwargs appropriate for the ActorCritic object 
             you provided to PPO.
-
         seed (int): Seed for random number generators.
-
         actions_per_epoch (int): Number of steps of interaction (state-action pairs) 
             for the agent and the environment in each epoch.
-
         epochs (int): Number of epochs of interaction (equivalent to
             number of policy updates) to perform.
-
         gamma (float): Discount factor. (Always between 0 and 1.)
-
         clip_ratio (float): Hyperparameter for clipping in the policy objective.
             Roughly: how far can the new policy go from the old policy while 
             still profiting (improving the objective function)? The new policy 
             can still go farther than the clip_ratio says, but it doesn't help
             on the objective anymore. (Usually small, 0.1 to 0.3.) Typically
             denoted by :math:`\epsilon`. 
-
         pi_lr (float): Learning rate for policy optimizer.
-
         vf_lr (float): Learning rate for value function optimizer.
-
         train_pi_iters (int): Maximum number of gradient descent steps to take 
             on policy loss per epoch. (Early stopping may cause optimizer
             to take fewer than this.)
-
         train_v_iters (int): Number of gradient descent steps to take on 
             value function per epoch.
-
         lam (float): Lambda for GAE-Lambda. (Always between 0 and 1,
             close to 1.)
-
         max_ep_len (int): Maximum length of trajectory / episode / rollout.
-
         target_kl (float): Roughly what KL divergence we think is appropriate
             between new and old policies after an update. This will get used 
             for early stopping. (Usually small, 0.01 or 0.05.)
-
         logger_kwargs (dict): Keyword args for EpochLogger.
-
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
-
     """
 
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
@@ -164,22 +138,18 @@ def ppo_algo(env, seed=0,
 
         # Policy loss
         # TODO: need to be able to input all of the observations and compute their logp and the action. 
-        
+
         # get prob dist for the observation: 
         #print('observation for compute loss pi', obs, obs.shape)
         oh = onehotter(obs, stateDims)
         #print(oh.shape)
         logits = nn(oh)
-        prob_dist = torch.nn.functional.softmax(logits, dim=1)  
+        prob_dist = torch.nn.functional.softmax(logits, dim=1)
         log_prob_dist = torch.log(prob_dist)
         logp = torch.gather(log_prob_dist, 1, act.unsqueeze(1).long()) 
         #logp = torch.log(prob_dist[act])
-        # print('prob_dist: ' + str(prob_dist))
-        # print('logp_dist: ' + str(log_prob_dist))
-        # print("logP: " + str(logp))
 
         ratio = torch.exp(logp - logp_old)
-        # print("ratio: " + str(ratio))
         #print( 'ratio', ratio, ratio.shape, 'advantage',  adv, adv.shape)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
@@ -356,12 +326,9 @@ def ppo_algo(env, seed=0,
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--exp_name', type=str, default='ppo')
     args = parser.parse_args()
-
     mpi_fork(args.cpu)  # run parallel code with mpi
-
     from spinup.utils.run_utils import setup_logger_kwargs
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
-
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, actions_per_epoch=args.steps, epochs=args.epochs,
