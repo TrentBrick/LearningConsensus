@@ -1,4 +1,4 @@
-from multi_agent_env.scenario import BaseScenario
+from multiagent.scenario import BaseScenario
 
 
 ###TODO: Need to finish this environment, this is just boilerplate code

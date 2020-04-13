@@ -3,7 +3,7 @@ from gym import spaces
 from gym.envs.registration import EnvSpec
 import numpy as np
 # from multiagent.multi_discrete import MultiDiscrete
-from multi_utils import MultiAgentActionSpace, MultiAgentObservationSpace
+from multiagent.multi_utils import MultiAgentActionSpace, MultiAgentObservationSpace
 
 # environment for all agents in the multiagent world
 # currently code assumes that no agents will be created/destroyed at runtime!
@@ -18,7 +18,7 @@ class MultiAgentEnv(gym.Env):
         # set required vectorized gym env property
         self.n = len(world.policy_agents)
         # scenario callbacks
-        self.reset_callback = world.reset_
+        self.reset_callback = reset_callback
         self.reward_callback = reward_callback
         self.observation_callback = observation_callback
         self.info_callback = info_callback
@@ -36,7 +36,7 @@ class MultiAgentEnv(gym.Env):
         # configure action space for each agent
         self.action_space = MultiAgentActionSpace([spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
         # configure observation space
-        self.observation_space = MultiAgentObservationSpace([spaces.Box(low=0, high=2, obs_dim=(self.n,), dtype=np.uint8) for _in range(self.n)])
+        self.observation_space = MultiAgentObservationSpace([spaces.Box(0, 2, (self.n,), dtype=np.uint8) for _ in range(self.n)])
         # self.observation_space = []
         # for agent in self.agents:
         #     # May be useful to have this because agents could have different state sizes in the future
@@ -87,7 +87,7 @@ class MultiAgentEnv(gym.Env):
     def step(self, action_n, curr_sim_len):
         obs_n = []
         reward_n = []
-        done_n = None
+        done_n = []
         info_n = {'n': []}
         self.agents = self.world.policy_agents
         # set action for each agent
@@ -102,7 +102,7 @@ class MultiAgentEnv(gym.Env):
             obs_n.append(self._get_obs(agent))
             done_n.append(self._get_done(agent))
 
-        info_n['n'].append(self._get_info(agent))
+        # info_n['n'].append(self._get_info(agent))
 
         # all agents get total reward in cooperative case - may be good to add in the future
         reward = np.sum(reward_n)
@@ -113,7 +113,7 @@ class MultiAgentEnv(gym.Env):
 
     def reset(self):
         # reset world
-        self.reset_callback(self.world)
+        self.reset_callback(self.params, self.world)
         # record observations for each agent
         obs_n = []
         self.agents = self.world.policy_agents
@@ -136,7 +136,7 @@ class MultiAgentEnv(gym.Env):
     def _get_done(self, agent):
         if self.done_callback is None:
             return False
-        return self.done_callback(agent, self.world)
+        return self.done_callback(agent)
 
     # get rewards for all agents
     def _get_reward(self, curr_sim_len):
@@ -145,11 +145,11 @@ class MultiAgentEnv(gym.Env):
     # set env action for a particular agent - this still needs to be configured
     def _set_action(self, action_index, agent):
         agent.actionIndex = action_index
-        agent.actionString = agent.actionSpace[action_index
+        agent.actionString = agent.actionSpace[action_index]
         
         ###If commit in agents action space, then commit
-        if 'commit' in self.actionStr:
-            self.committed_value = int(self.actionStr.split('_')[1])
+        if 'commit' in agent.actionString:
+            agent.committed_value = int(agent.actionString.split('_')[1])
 
     # reset rendering assets
     # def _reset_render(self):

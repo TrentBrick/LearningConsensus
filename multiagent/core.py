@@ -1,17 +1,16 @@
 import numpy as np 
 from consensus_env import getActionSpace, actionEffect
+
 import torch
     
 
 
 class Honest_Agent:
 
-    def __init__(self, params, neural_net, value_function, agentID, give_inits):
+    def __init__(self, params, agentID, give_inits):
         self.isByzantine = False
         self.agentId = agentID 
-        self.brain = neural_net
-        self.value_function = value_function
-        self.actionSpace = getHonestActionSpace(params)
+        self.actionSpace = self.getHonestActionSpace(params)
         self.actionDims = len(self.actionSpace)
         self.stateDims = len(params['commit_vals'])+1 # +1 for the null value. 
         self.committed_ptr =  False
@@ -20,7 +19,7 @@ class Honest_Agent:
         self.initVal = give_inits[agentID]
         # self.initState = self.initAgentState(params, init_val, give_inits)
         #self.state = torch.tensor(self.initState).float()
-        self.state = self.initAgentState(params, init_val, give_inits)
+        self.state = self.initAgentState(params, self.initVal, give_inits)
         self.committed_value = False
 
         self.actionIndex = None
@@ -29,13 +28,13 @@ class Honest_Agent:
         # can use this to create agents that don't react to the policy
         self.action_callback = None
     
-    def initAgentState(params, init_val, give_inits):
+    def initAgentState(self, params, init_val, give_inits):
         initState = [init_val]
         for a in range(params['num_agents']-1):
             initState.append(params['null_message_val'])
-        return torch.tensor(initState).uint8()
+        return torch.tensor(initState).int()
 
-    def getHonestActionSpace(params):
+    def getHonestActionSpace(self, params):
         honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
         return honest_action_space
 
@@ -49,8 +48,8 @@ class World(object):
     
     #return all agents controlled by a policy 
     @property
-        def policy_agents(self):
-            return [agent for agent in self.agents if agent.action_callback is None]
+    def policy_agents(self):
+        return [agent for agent in self.agents if agent.action_callback is None]
 
     # return all agents controlled by world scripts
     @property
@@ -66,11 +65,11 @@ class World(object):
         actor_ind = 1
         new_state = [agent.initVal] # keep track of the agent's initial value
         for actor in agent_list:
-            if agent.agentID == actor.agentID:
+            if agent.agentId == actor.agentId:
                 continue
-            new_state.append(actionEffect(self.params, actor.actionStr, actor.initVal, agent.state[actor_ind], actor.agentId))
+            new_state.append(actionEffect(self.params, actor.actionString, actor.initVal, agent.state[actor_ind], actor.agentId))
             actor_ind +=1
-        agent.state = torch.tensor(new_state).uint8()
+        agent.state = torch.tensor(new_state).int()
 
 
 

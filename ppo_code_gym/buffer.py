@@ -1,4 +1,11 @@
-class multiAgentPPOBuffer:
+import copy
+import numpy as np 
+import spinup.algos.pytorch.ppo.core as core
+from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
+import torch
+
+
+class MultiAgentPPOBuffer:
     """
     A buffer for storing trajectories experienced by a PPO agent interacting
     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)

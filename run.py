@@ -11,8 +11,8 @@ import consensus_env
 import ppo_code.ppo as ppo
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
-from multi_agent_env import make_env
-from ppo_code_gym import ppo
+from multiagent.make_env import make_env
+from ppo_code_gym.ppo import ppo as ppo_gym
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -126,6 +126,7 @@ def initialize_parameters():
     for i in range(tot_combos):
         print(' ====================== Running param combo ', i+1, '/', tot_combos, '======================')
         print('combo of params is:', pg[i])
+        params = pg[i]
 
         #### Code using old environment ######
         # env = consensus_env.ConsensusEnv(pg[i])
@@ -140,7 +141,7 @@ def initialize_parameters():
         #     #logger_kwargs=logger_kwargs)
         #### Code using gym #####
         env = make_env(params, "basic_honest")
-        ppo(env, params, steps_per_epoch=params['actions_per_epoch'], epochs=params['epochs'], max_epoch_len=params['actions_per_epoch']*params['max_round_len'])
+        ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch'], epochs=params['epochs'], max_ep_len=params['actions_per_epoch']*params['max_round_len'])
         
         '''
         #receiving back results to store so that multiple iterations can be compared:

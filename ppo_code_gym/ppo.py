@@ -4,10 +4,10 @@ from torch.optim import Adam
 import gym
 import time
 import spinup.algos.pytorch.ppo.core as core
-from spinup.utils.logx import Epochhonest_logger
+from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
-from buffer import MultiAgentPPOBuffer
+from ppo_code_gym.buffer import MultiAgentPPOBuffer
 
 
 class PPOBuffer:
@@ -88,7 +88,7 @@ class PPOBuffer:
 def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, honest_logger_kwargs=dict(), save_freq=10):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10):
     """
     Proximal Policy Optimization (by clipping), 
     with early stopping based on approximate KL
@@ -170,7 +170,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up honest_logger and save configuration
-    honest_honest_logger = Epochhonest_logger(**honest_logger_kwargs)
+    honest_logger = EpochLogger(**logger_kwargs)
     # honest_logger.save_config(locals())
 
     # Random seed
@@ -179,26 +179,27 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     np.random.seed(seed)
 
     # Instantiate environment
-    env = env_fn()
+    env = env_fn
     obs_dim = env.observation_space[0].shape #Take first element b/c all of them have the same size
     act_dim = env.action_space[0].shape #Take first element b/c all have the same size
 
     # Create actor-critic module
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    #TODO: using the first part
+    ac = actor_critic(env.observation_space[0], env.action_space[0], **ac_kwargs)
 
     # Sync params across processes
     sync_params(ac)
 
     # Count variables
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.v])
-    honest_honest_logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
+    honest_logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
     # buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
     #TODO: change the diff of params term
-    bug = MultiAgentPPOBuffer(obs_dim, 1, local_steps_per_epoch, params['num_agents']-params['num_byzantine'])
-    # Set up function for computing PPO policy loss
+    buf = MultiAgentPPOBuffer(obs_dim, 1, local_steps_per_epoch, params['num_agents']-params['num_byzantine'])
+    # Set uxp function for computing PPO policy loss
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
@@ -276,8 +277,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             actions_list = []
             v_list = []
             logp_list = []
-            for ind, agent in enumerate(env.agents):
-                a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.uint8))
+            for i, agent in enumerate(env.agents):
+                a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float))
                 actions_list.append(a)
                 v_list.append(v)
                 logp_list.append(logp)
@@ -310,7 +311,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if timeout or epoch_ended:
                     v = 0
                     for ind, agent in enumerate(env.agents):
-                        _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.uint8))
+                        _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float))
                         v+=curr_v
 
                         # _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.uint8))

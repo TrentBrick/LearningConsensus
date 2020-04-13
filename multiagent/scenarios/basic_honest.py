@@ -1,23 +1,24 @@
-from multi_agent_env.scenario import BaseScenario
-from multi_agent_env.core import World, Honest_Agent
+from multiagent.scenario import BaseScenario
+from multiagent.core import World, Honest_Agent
+import numpy as np
 
 
 class Scenario(BaseScenario):
 
     def make_world(self, params):
-        world = World()
+        world = World(params)
         num_agents = params['num_agents']
 
 
-        give_inits = list(np.random.choice([0,1], self.params['num_agents']))
-        world.agents = [Honest_Agent(params, self.honest_policy, self.honest_v_function, i, give_inits) for i in range(num_agents)]
+        give_inits = list(np.random.choice([0,1], params['num_agents']))
+        world.agents = [Honest_Agent(params, i, give_inits) for i in range(num_agents)]
 
         return world
 
 
-    def reset_world(self, params, world, honest_policy, value_function):
-        give_inits = list(np.random.choice([0,1], self.params['num_agents']))
-        world.agents = [Honest_Agent(params, honest_policy, honest_v_function, i, give_inits) for i in range(num_agents)]
+    def reset_world(self, params, world):
+        give_inits = list(np.random.choice([0,1], params['num_agents']))
+        world.agents = [Honest_Agent(params, i, give_inits) for i in range(params['num_agents'])]
     
     def benchmark_data(self, agent, world):
         #Create this method later
@@ -34,21 +35,21 @@ class Scenario(BaseScenario):
         starting_values = []
         reward_list = []
         for agent in world.agents:
-            if type(h.committed_value) is not int:
+            if type(agent.committed_value) is not int:
                 all_committed = False
                 break
             else: 
-                comm_values.append(h.committed_value)
-                starting_values.append(h.initVal)
+                comm_values.append(agent.committed_value)
+                starting_values.append(agent.initVal)
 
         if all_committed: 
             sim_done = True
-            honest_comm_reward , satisfied_constraints = getCommReward(params, comm_values, starting_values)
-            for i, a in enumerate(agent_list):
+            honest_comm_reward , satisfied_constraints = self.getCommReward(params, comm_values, starting_values)
+            for i, a in enumerate(world.agents):
                 a.reward += honest_comm_reward
 
         for i, a in enumerate(world.agents):
-            if a.isByzantine == False and curr_s curr_sim_len == 1 and 'send_to_all-' in a.actionStr:
+            if a.isByzantine == False and curr_sim_len == 1 and 'send_to_all-' in a.actionString:
                 a.reward += params['send_all_first_round_reward']
         
                 # round length penalties. dont incur if the agent has committed though. 
@@ -64,7 +65,7 @@ class Scenario(BaseScenario):
             reward_list.append(agent.reward)
         return sim_done, reward_list
 
-    def getCommReward(params, comm_values, starting_values):
+    def getCommReward(self, params, comm_values, starting_values):
 
         satisfied_constraints = False
 
