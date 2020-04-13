@@ -309,7 +309,10 @@ def giveRewards(params, agent_list, honest_list, curr_sim_len):
 
     ## sim_done also if we hit the last round
     if curr_sim_len == params['max_round_len']:
+<<<<<<< HEAD
         print('hit max round length')
+=======
+>>>>>>> 046c7f7b17619537fcb850a3a3fb6e1e1b4865d7
         sim_done = True
 
     return sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
@@ -484,7 +487,7 @@ class ConsensusEnv():
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def env_step(self):#, honest_logger, byzantine_logger):
+    def env_step(self, single_run_trajectory_log):#, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
         # anything though as each agent has their own buffer. 
 
@@ -507,7 +510,7 @@ class ConsensusEnv():
             actions_list.append(a)
             logp_list.append(logp)
             v_list.append(v)
-                
+
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
             # only want to store things if the agent has not committed. 
             if type(agent.committed_value) is bool: 
@@ -518,6 +521,9 @@ class ConsensusEnv():
         sim_done = updateStates(self.params, self.agent_list, self.honest_list, len(self.honest_buffer.temp_buf[0]['obs']))
 
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
+            ## Update trajectory log for printing
+            single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append((len(self.honest_buffer.temp_buf[0]['obs']), agent.state, agent.actionSpace[actions_list[ind]]))
+
             # only want to store things if the agent has not committed. 
             if type(agent.committed_value) is bool: 
                 buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
@@ -530,7 +536,12 @@ class ConsensusEnv():
             if self.params['num_byzantine']>0:
                 self.byz_buffer.finish_sim(self.agent_list)
 
-        return sim_done
+        ##Get average v value to input into log
+        v = 0
+        for val in v_list:
+            if val is not None:
+                v+=val
+        return sim_done, val, single_run_trajectory_log
 
     def render(self,  mode='human', close=False):
         print("This is a test of rendering the environment ")
