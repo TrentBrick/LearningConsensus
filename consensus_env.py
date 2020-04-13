@@ -300,10 +300,17 @@ def giveRewards(params, agent_list, honest_list, curr_sim_len):
             a.reward += params['send_all_first_round_reward']
 
         # round length penalties. dont incur if the agent has committed though. 
-        if type(a.committed_value) is bool and not a.isByzantine:
+        if type(a.committed_value) is bool and not a.isByzantine and curr_sim_len == params['max_round_len']:
+            a.reward += params['termination_penalty']
+        elif type(a.committed_value) is bool and not a.isByzantine:
             a.reward += params['additional_round_penalty']
         elif a.isByzantine: 
             a.reward -= params['additional_round_penalty']
+
+    ## sim_done also if we hit the last round
+    if curr_sim_len == params['max_round_len']:
+        print('hit max round length')
+        sim_done = True
 
     return sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
 
