@@ -10,7 +10,7 @@ from spinup.utils.mpi_tools import mpi_statistics_scalar
 import copy
 #from actions import getActionSpace, actionEffect
 
-def getActionSpace(params, isByzantine, byzantine_inds=None, can_send_either_value=True):
+def getActionSpace(params, isByzantine, byzantine_inds=None, can_send_either_value=False):
     '''move this to a new script that config and environment and agent utils can reference. '''
 
     # making the action space.
@@ -206,6 +206,8 @@ class Agent:
         #action_logprob = real_logprobs[action_ind]
         self.action = action_ind
         self.actionStr = self.actionSpace[action_ind]
+
+        #print('The action space is:::: ', self.actionSpace)
 
         ###If commit in agents action space, then commit
         # here is where the committed value is set. but this is before the commit can be added to the rewards. 
@@ -483,24 +485,27 @@ class ConsensusEnv():
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def env_step(self):#, honest_logger, byzantine_logger):
+    def env_step(self, temperature):#, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
 
         # choose new actions: 
         actions_list, logp_list, v_list = [], [], []
-        for agent in self.agent_list: 
+        for temp_ind, agent in enumerate(self.agent_list): 
             if agent.isByzantine: 
                 # TODO: implement temperature tracking
-                curr_temperature = 1.0#byz_curr_temperature
+                curr_temperature = temperature
             else: 
-                curr_temperature = 1.0 #honest_curr_temperature
+                curr_temperature = temperature
 
-            # TODO: need to return a value along with the action taken!!! 
-            # CANT RETURN NONES HERE BECAUSE IT MESSES WITH THE CALCLUATIONS!!!!
+            
             if type(agent.committed_value) is int: # dont change to True! Either it is False or a real value. 
-                a, logp, v = agent.action, None, None
+                a, logp, v = agent.action, None, None # need this even though its not appended to fill up the list that is indexed. 
             else:
                 a, logp, v = agent.agent_step(self.oneHotStateMapper, curr_temperature)
+                
+                #if temp_ind == 0:
+                #print(agent.actionStr, a, logp, v)
+                    
 
             actions_list.append(a)
             logp_list.append(logp)
@@ -524,10 +529,12 @@ class ConsensusEnv():
 
         # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
         sim_done = updateStates(self.params, self.agent_list, self.honest_list, len(self.honest_buffer.temp_buf[0]['obs']))
+        # TODO: get rid of agent rewards. 
+        agent_rewards = []
 
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
             # only want to store things if the agent has not committed. 
-
+            agent_rewards.append(agent.reward)
             if type(agent.committed_value) is bool: 
                 buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
                 buf.store_reward(ind, agent.reward )
@@ -539,7 +546,9 @@ class ConsensusEnv():
             if self.params['num_byzantine']>0:
                 self.byz_buffer.finish_sim(self.agent_list)
 
-        return sim_done
+            #print('=============== end of sim ===============')
+
+        return sim_done, agent_rewards
 
     def render(self,  mode='human', close=False):
         print("This is a test of rendering the environment ")

@@ -255,28 +255,48 @@ def ppo_algo(env, seed=0,
     
     print(' local actions per epoch', local_actions_per_epoch)
 
+    temperature = 10.0
+    anneal_temperature = 0.98
+
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         sim_done = False
         epoch_done = False
+        epoch_rewards = []
         while not epoch_done:
      
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
-            sim_done = env.env_step()#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
+            sim_done, agent_rewards = env.env_step(temperature)#, honest_logger, byzantine_logger) # episode length and then the total number of steps in the buffer. 
 
             if sim_done:
                 #for a in env.honest_list: 
                     #print(a.actionStr, a.committed_value)
                 #print('========')
+                epoch_rewards.append( round(sum(agent_rewards)/len(agent_rewards),4))
+
+                if np.random.rand() >0.9:
+                    print('first agent', env.agent_list[0].last_action_etc, env.agent_list[0].committed_value,
+                        'second agent', env.agent_list[1].last_action_etc, env.agent_list[1].committed_value,
+                        'third agent', env.agent_list[2].last_action_etc, env.agent_list[2].committed_value)
+                    print('========================')
+
                 o, ep_ret, ep_len = env.resetStatesandAgents(), 0, 0 # reset the environment
                 if env.majority_agent_buffer.ptr > local_actions_per_epoch:
                     epoch_done =True
 
             #print('finished simulation', t)
 
+        temperature = anneal_temperature * temperature
+        if temperature < 1.0:
+            temperature=1.0
+
         if (epoch+1) % 1==0:
-            print('======= end of simulations for epoch:', epoch+1, "going to run updates", env.majority_agent_buffer.ptr, sim_done)
+            print('======= end of simulations for epoch:', epoch+1, "going to run updates")
+            print('total number of steps', env.majority_agent_buffer.ptr, 'number of simulations', len(epoch_rewards))
+            print('mean rewards for each trajectory', epoch_rewards)
+            print('overall mean reward', sum(epoch_rewards)/len(epoch_rewards) )
+            print('current temp', temperature)
 
         # TODO: get model save working. 
         # Save model

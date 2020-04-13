@@ -80,7 +80,7 @@ def initialize_parameters():
     #parser.add_argument("--correct_commit", action ='store', type=str, default = [1,-1], nargs='+')
     
     ## NN Settings
-    parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.003], help='')
+    parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.03], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
     parser.add_argument("--hidden_sizes", action ='store', type=str, default = ['(16,8)'], nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
     parser.add_argument("--activation", type=getActivation, action='store', nargs='+', default = [torch.tanh], help='Activation functions: tanh, relu, sigmoid')
