@@ -204,10 +204,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
         # Policy loss
+        #TODO: do we need to make this a onehotter to fix the bug on line 210?
         pi, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
-        print(adv.shape)
-        print(ratio.shape)
+        # print("logp: ", len(logp))
+        # print("logp_old: ", len(logp_old))
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
@@ -289,13 +290,13 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             ep_ret += sum(r_list)
             ep_len += 1
 
-
             # save and log
             for ind, agent in enumerate(env.agents):
 
                 if type(agent.committed_value) is bool:
                     buf.store(ind, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
                     buf.store_reward(ind, agent.reward)
+
 
             honest_logger.store(VVals=sum(v_list))
             

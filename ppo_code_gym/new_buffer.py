@@ -5,7 +5,7 @@ from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_sc
 import torch
 
 
-class MultiAgentPPOBuffer:
+class NewMultiAgentPPOBuffer:
     """
     A buffer for storing trajectories experienced by a PPO agent interacting
     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
@@ -37,15 +37,14 @@ class MultiAgentPPOBuffer:
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
-        # print("size: ",len(obs.numpy()))
         self.temp_buf[agent_ind]['obs'].append(obs.numpy())
-        # print("obs in buf len: ", len(self.temp_buf[agent_ind]['obs']))
         self.temp_buf[agent_ind]['act'].append(act)
         self.temp_buf[agent_ind]['val'].append(val)
         self.temp_buf[agent_ind]['logp'].append(logp)
 
     def store_reward(self, agent_ind, rew):
         self.temp_buf[agent_ind]['rew'].append(rew)
+    
 
     def finish_sim(self, agent_list):
         """
@@ -65,9 +64,8 @@ class MultiAgentPPOBuffer:
         
         for ind, agent in enumerate(agent_list): # indices and dictionaries for each agent. 
             store_dic = self.temp_buf[ind]
-            # print("agent reward: ", agent.reward)
             store_dic['rew'].append(agent.reward)
-            store_dic['val'].append(agent.reward)
+            # store_dic['val'].append(agent.reward)
             rews = np.asarray(store_dic['rew']) # adding the very last value. 
             vals = np.asarray(store_dic['val'])
             
@@ -75,23 +73,16 @@ class MultiAgentPPOBuffer:
             # this is much more sophisticated than the basic advantage equation. 
             deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
             adv = core.discount_cumsum(deltas, self.gamma * self.lam)
-            # print("rew length: ", len(rews))
-            # print("vals length: ", len(vals))
-            # print("adv length: ", adv.size)
-            # print("obs length: ", len(store_dic['obs']))
-            # print("act length: ", len(store_dic['act']))
-            # print("logp length: ", len(store_dic['logp']))
-
+            
             # the next line computes rewards-to-go, to be targets for the value function
             ret = core.discount_cumsum(rews, self.gamma)[:-1]
-            # print(adv.size)
+            
             self.obs_buf+= store_dic['obs']
             self.act_buf+= store_dic['act']
             self.rew_buf+= store_dic['rew'] # the actual reward recieved. 
             self.val_buf+= store_dic['val'] # the value function estimate. 
             self.logp_buf+= store_dic['logp']
             self.adv_buf += adv.tolist()
-            # print(len(self.adv_buf))
             self.ret_buf += ret.tolist()
             self.ptr += len(store_dic['obs']) # number of new observations added here. 
 
