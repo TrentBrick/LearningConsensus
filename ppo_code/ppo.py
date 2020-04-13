@@ -258,7 +258,8 @@ def ppo_algo(env, seed=0,
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         sim_done = False
-        while env.majority_agent_buffer.ptr < local_actions_per_epoch and not sim_done:
+        epoch_done = False
+        while not epoch_done:
      
             '''' not sure if I want the neural networks here in ppo. 
             no I want the updates to happen within the agents themselves. '''
@@ -269,11 +270,13 @@ def ppo_algo(env, seed=0,
                     #print(a.actionStr, a.committed_value)
                 #print('========')
                 o, ep_ret, ep_len = env.resetStatesandAgents(), 0, 0 # reset the environment
+                if env.majority_agent_buffer.ptr > local_actions_per_epoch:
+                    epoch_done =True
 
             #print('finished simulation', t)
 
-        if epoch+1 % 5==0:
-            print('======= end of simulations for epoch:', epoch+1)
+        if (epoch+1) % 1==0:
+            print('======= end of simulations for epoch:', epoch+1, "going to run updates", env.majority_agent_buffer.ptr, sim_done)
 
         # TODO: get model save working. 
         # Save model
@@ -281,6 +284,7 @@ def ppo_algo(env, seed=0,
         #    logger.save_state({'env': env}, None)
 
         # Perform PPO update!
+        print('======= performing the PPO update!! ======== ')
         if env.params['num_agents'] - env.params['num_byzantine'] > 0: 
             update(env.honest_buffer, env.honest_policy, env.honest_v_function,
             env.honest_optimizer, env.honest_v_function_optimizer, env.stateDims)
