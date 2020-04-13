@@ -309,10 +309,7 @@ def giveRewards(params, agent_list, honest_list, curr_sim_len):
 
     ## sim_done also if we hit the last round
     if curr_sim_len == params['max_round_len']:
-<<<<<<< HEAD
         print('hit max round length')
-=======
->>>>>>> 046c7f7b17619537fcb850a3a3fb6e1e1b4865d7
         sim_done = True
 
     return sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
