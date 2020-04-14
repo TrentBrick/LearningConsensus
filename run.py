@@ -7,9 +7,8 @@ import torch
 #import main
 import pandas as pd
 #import gym 
-# TODO: can you delete all of the no longer needed files? 
-#import consensus_env
-#import ppo_code.ppo as ppo
+import consensus_env
+import ppo_code.ppo as ppo
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from multiagent.make_env import make_env
@@ -139,10 +138,10 @@ def initialize_parameters():
         # ppo.ppo_algo(env, gamma=pg[i]['gamma'], 
         #     seed=pg[i]['random_seed'], actions_per_epoch=pg[i]['actions_per_epoch'], 
         #     epochs=pg[i]['epochs'])
-        #     #logger_kwargs=logger_kwargs)
+            #logger_kwargs=logger_kwargs)
         #### Code using gym #####
         env = make_env(params, "basic_honest")
-        ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch'], epochs=params['epochs'], max_ep_len=params['actions_per_epoch']*params['max_round_len'])
+        ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=params['actions_per_epoch']*params['max_round_len'])
         
         '''
         #receiving back results to store so that multiple iterations can be compared:

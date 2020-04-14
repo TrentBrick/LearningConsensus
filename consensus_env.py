@@ -10,7 +10,7 @@ from spinup.utils.mpi_tools import mpi_statistics_scalar
 import copy
 #from actions import getActionSpace, actionEffect
 
-def getActionSpace(params, isByzantine, byzantine_inds=None, can_send_either_value=True):
+def getActionSpace(params, isByzantine, byzantine_inds=None, can_send_either_value=False):
     '''move this to a new script that config and environment and agent utils can reference. '''
 
     # making the action space.
@@ -167,6 +167,7 @@ class Agent:
         self.initState = self.initAgentState(params, init_val, give_inits)
         self.state = torch.tensor(self.initState).float()
         self.committed_value = False
+        self.last_action_etc = dict()
 
     def initAgentState(self, params, init_val, give_inits ):
         # for Byzantine give the init values of all other agents. if honest, only get own value. 
@@ -190,6 +191,7 @@ class Agent:
         oh = onehotter(self.state.unsqueeze(0), self.stateDims) # each column is one of the states. 
         #making a decision:
         logits = self.brain(oh)
+        #print('before sampling from NN for actions', oh, logits)
         #log_probs = Categorical(logits=logits).log_prob()
         real_logprobs = torch.log(torch.nn.functional.softmax(logits, dim=1)) # currently not vectorized
         #print(real_logprobs)
@@ -205,9 +207,13 @@ class Agent:
         self.action = action_ind
         self.actionStr = self.actionSpace[action_ind]
 
+        #print('The action space is:::: ', self.actionSpace)
+
         ###If commit in agents action space, then commit
-        if 'commit' in self.actionStr:
-            self.committed_value = int(self.actionStr.split('_')[1])
+        # here is where the committed value is set. but this is before the commit can be added to the rewards. 
+        # Moved this to be inside of the update states region instead. 
+        #if 'commit' in self.actionStr:
+        #    self.committed_value = int(self.actionStr.split('_')[1])
 
         value = self.value_function(oh)
         return self.action.squeeze(), action_logprob.squeeze(), value.squeeze()
@@ -251,6 +257,7 @@ def updateStates(params, agent_list, honest_list, curr_sim_len):
     else: 
         #look at all agent actions and update the state of each to accomodate actions
         for reciever in agent_list:
+
             new_state = [reciever.initVal] # keep track of the agent's initial value, 
             #want to show to the NN each time
             actor_ind = 1 # this is always relative to the reciever. We want indexes 1 and then 2 from their state space
@@ -300,16 +307,10 @@ def giveRewards(params, agent_list, honest_list, curr_sim_len):
             a.reward += params['send_all_first_round_reward']
 
         # round length penalties. dont incur if the agent has committed though. 
-        if type(a.committed_value) is bool and not a.isByzantine and curr_sim_len == params['max_round_len']:
-            a.reward += params['termination_penalty']
-        elif type(a.committed_value) is bool and not a.isByzantine:
+        if type(a.committed_value) is bool and not a.isByzantine:
             a.reward += params['additional_round_penalty']
         elif a.isByzantine: 
             a.reward -= params['additional_round_penalty']
-
-    ## sim_done also if we hit the last round
-    if curr_sim_len == params['max_round_len']:
-        sim_done = True
 
     return sim_done # NEED TO DISTINGUISH BETWEEN AGENT BEING DONE AND A WHOLE ROUND BEING DONE. 
 
@@ -455,6 +456,7 @@ class ConsensusEnv():
             a.committed_value = False
             a.committed_ptr = False
             a.reward = 0
+            a.last_action_etc = dict()
         return honest_list, byzantine_list
             
             
@@ -483,44 +485,56 @@ class ConsensusEnv():
                 agent_list.append(a)
         return agent_list, honest_list, byzantine_list
 
-    def env_step(self, single_run_trajectory_log):#, honest_logger, byzantine_logger):
+    def env_step(self, temperature):#, honest_logger, byzantine_logger):
         # this step needs to iterate through all of the agents. it doesnt need to return
-        # anything though as each agent has their own buffer. 
 
         # choose new actions: 
         actions_list, logp_list, v_list = [], [], []
-        for agent in self.agent_list: 
+        for temp_ind, agent in enumerate(self.agent_list): 
             if agent.isByzantine: 
                 # TODO: implement temperature tracking
-                curr_temperature = 1.0#byz_curr_temperature
+                curr_temperature = temperature
             else: 
-                curr_temperature = 1.0 #honest_curr_temperature
+                curr_temperature = temperature
 
-            # TODO: need to return a value along with the action taken!!! 
-            # CANT RETURN NONES HERE BECAUSE IT MESSES WITH THE CALCLUATIONS!!!!
+            
             if type(agent.committed_value) is int: # dont change to True! Either it is False or a real value. 
-                a, logp, v = agent.action, None, None
+                a, logp, v = agent.action, None, None # need this even though its not appended to fill up the list that is indexed. 
             else:
                 a, logp, v = agent.agent_step(self.oneHotStateMapper, curr_temperature)
+                
+                #if temp_ind == 0:
+                #print(agent.actionStr, a, logp, v)
+                    
 
             actions_list.append(a)
             logp_list.append(logp)
             v_list.append(v)
-
+                
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
-            # only want to store things if the agent has not committed. 
+            # only want to store things if the agent has not committed. # for the very last comittment and reward cycle need to store in a temp and add all at the end. 
+            
+            # update if the agent has committed here: 
+            if 'commit' in agent.actionStr:
+                agent.committed_value = int(agent.actionStr.split('_')[1]) # dont store reward from committing. this is stored in the finish path for everything!!
+
             if type(agent.committed_value) is bool: 
                 buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
                 buf.store(ind, agent.state, actions_list[ind], v_list[ind], logp_list[ind] )
+            elif type(agent.committed_value) is int and len(agent.last_action_etc.keys())==0: # agent has committed and it has only just committed!! ie it doesnt have any dictoinary values yet. 
+                agent.last_action_etc['obs'] = agent.state
+                agent.last_action_etc['act'] = actions_list[ind]
+                agent.last_action_etc['val'] = v_list[ind]
+                agent.last_action_etc['logp'] = logp_list[ind]  
 
         # update the environment for each agent and calculate the reward here also if the simulation has terminated.  
         sim_done = updateStates(self.params, self.agent_list, self.honest_list, len(self.honest_buffer.temp_buf[0]['obs']))
+        # TODO: get rid of agent rewards. 
+        agent_rewards = []
 
         for ind, agent in enumerate(self.agent_list): # store the new values in the buffer. 
-            ## Update trajectory log for printing
-            single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentID)].append((len(self.honest_buffer.temp_buf[0]['obs']), agent.state, agent.actionSpace[actions_list[ind]]))
-
             # only want to store things if the agent has not committed. 
+            agent_rewards.append(agent.reward)
             if type(agent.committed_value) is bool: 
                 buf = self.byz_buffer if agent.isByzantine else self.honest_buffer
                 buf.store_reward(ind, agent.reward )
@@ -532,12 +546,9 @@ class ConsensusEnv():
             if self.params['num_byzantine']>0:
                 self.byz_buffer.finish_sim(self.agent_list)
 
-        ##Get average v value to input into log
-        v = 0
-        for val in v_list:
-            if val is not None:
-                v+=val
-        return sim_done, val, single_run_trajectory_log
+            #print('=============== end of sim ===============')
+
+        return sim_done, agent_rewards
 
     def render(self,  mode='human', close=False):
         print("This is a test of rendering the environment ")
@@ -599,10 +610,25 @@ class PPOBuffer:
         
         for ind, agent in enumerate(agent_list): # indices and dictionaries for each agent. 
             store_dic = self.temp_buf[ind]
-            store_dic['rew'].append(agent.reward)
-            store_dic['val'].append(agent.reward)
+
+            #print(agent.last_action_etc)
+            # adding in the last action. Should really turn this into a dictionary. 
+            store_dic['obs'].append(agent.last_action_etc['obs'].numpy())
+            store_dic['act'].append(agent.last_action_etc['act'])
+            store_dic['val'].append(agent.last_action_etc['val'])
+            store_dic['logp'].append(agent.last_action_etc['logp'])
+            # adding in the last reward
+            store_dic['rew'].append(agent.reward) # adding the final reward that corresponds to each agents commit. has to be delayed until after each agent is finished. 
+            
+            store_dic['rew'].append(0)
+            store_dic['val'].append(0)
+            # bit hacky but appends a 0 at the very end once everything terminated. this is to make the advantage function the same length. then seems to ignore the very last one. 
+            # would need to handle differently if we forced termination for the batch size which we dont. 
+            
             rews = np.asarray(store_dic['rew']) # adding the very last value. 
             vals = np.asarray(store_dic['val'])
+
+            #print( len(store_dic['rew']), len(store_dic['val']), len(store_dic['obs']) )
             
             # the next two lines implement GAE-Lambda advantage calculation.
             # this is much more sophisticated than the basic advantage equation. 
@@ -621,7 +647,13 @@ class PPOBuffer:
             self.ret_buf += ret.tolist()
             self.ptr += len(store_dic['obs']) # number of new observations added here. 
 
-            #print('finish path data', self.obs_buf, self.ptr)
+        # temp dict to compute everything for each agent. 
+        store_dict = {'obs':[], 'act':[], 
+        'rew':[], 'val':[], 'logp':[] }
+        self.temp_buf = {i:copy.deepcopy(store_dict) for i in range(self.num_agents)}
+
+
+        #print('finish this simulation, new size of the buffer is', self.ptr, "adv buff", len(self.adv_buf), 'obs buff', len(self.obs_buf))
 
     def get(self):
         """
@@ -658,11 +690,7 @@ class PPOBuffer:
         self.logp_buf = [] #np.zeros(size, dtype=np.float32)
         self.ptr, self.path_start_idx = 0, 0
 
-        # temp dict to compute everything for each agent. 
-        store_dict = {'obs':[], 'act':[], 
-        'rew':[], 'val':[], 'logp':[] }
-        self.temp_buf = {i:copy.deepcopy(store_dict) for i in range(self.num_agents)}
-
+        
         #print('after the reset', data['obs'])
 
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}

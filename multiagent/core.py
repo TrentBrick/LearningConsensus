@@ -25,6 +25,7 @@ class Honest_Agent:
         self.actionIndex = None
         self.actionString = ""
 
+        self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = None
     

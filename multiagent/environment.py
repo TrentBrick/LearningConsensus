@@ -89,15 +89,20 @@ class MultiAgentEnv(gym.Env):
         # self._reset_render()
         ###################################
 
-    def step(self, action_n, curr_sim_len):
+    def step(self, action_n, v_list, logp_list, curr_sim_len):
         obs_n = []
         reward_n = []
         done_n = []
         info_n = {'n': []}
         self.agents = self.world.policy_agents
         # set action for each agent
-        for i, agent in enumerate(self.agents):
-            self._set_action(action_n[i], agent)
+        for ind, agent in enumerate(self.agents):
+            self._set_action(action_n[ind], agent)
+            if type(agent.committed_value) is int and len(agent.last_action_etc.keys())==0: # agent has committed and it has only just committed!! ie it doesnt have any dictoinary values yet. 
+                agent.last_action_etc['obs'] = agent.state
+                agent.last_action_etc['act'] = action_n[ind]
+                agent.last_action_etc['val'] = v_list[ind]
+                agent.last_action_etc['logp'] = logp_list[ind] 
         # advance world state
         self.world.step()
         # record reward for each agent

@@ -66,13 +66,23 @@ class MultiAgentPPOBuffer:
         for ind, agent in enumerate(agent_list): # indices and dictionaries for each agent. 
             store_dic = self.temp_buf[ind]
             # print("agent reward: ", agent.reward)
-            store_dic['rew'].append(agent.reward)
-            store_dic['val'].append(agent.reward)
+            store_dic['obs'].append(agent.last_action_etc['obs'].numpy())
+            store_dic['act'].append(agent.last_action_etc['act'])
+            store_dic['val'].append(agent.last_action_etc['val'])
+            store_dic['logp'].append(agent.last_action_etc['logp'])
+
+            ##Add last reward
+            store_dic['rew'].append(agent.reward) # adding the final reward that corresponds to each agents commit. has to be delayed until after each agent is finished. 
+
+            store_dic['rew'].append(0)
+            store_dic['val'].append(0)
             rews = np.asarray(store_dic['rew']) # adding the very last value. 
             vals = np.asarray(store_dic['val'])
             
             # the next two lines implement GAE-Lambda advantage calculation.
             # this is much more sophisticated than the basic advantage equation. 
+            # print("rews: ", rews[:-1])
+            # print("vals: ", vals[1:])
             deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
             adv = core.discount_cumsum(deltas, self.gamma * self.lam)
             # print("rew length: ", len(rews))
@@ -91,11 +101,14 @@ class MultiAgentPPOBuffer:
             self.val_buf+= store_dic['val'] # the value function estimate. 
             self.logp_buf+= store_dic['logp']
             self.adv_buf += adv.tolist()
-            # print(len(self.adv_buf))
             self.ret_buf += ret.tolist()
             self.ptr += len(store_dic['obs']) # number of new observations added here. 
 
             #print('finish path data', self.obs_buf, self.ptr)
+
+        store_dict = {'obs':[], 'act':[], 
+        'rew':[], 'val':[], 'logp':[] }
+        self.temp_buf = {i:copy.deepcopy(store_dict) for i in range(self.num_agents)}
 
     def get(self):
         """
@@ -131,11 +144,6 @@ class MultiAgentPPOBuffer:
         self.val_buf = [] #np.zeros(size, dtype=np.float32)
         self.logp_buf = [] #np.zeros(size, dtype=np.float32)
         self.ptr, self.path_start_idx = 0, 0
-
-        # temp dict to compute everything for each agent. 
-        store_dict = {'obs':[], 'act':[], 
-        'rew':[], 'val':[], 'logp':[] }
-        self.temp_buf = {i:copy.deepcopy(store_dict) for i in range(self.num_agents)}
 
         #print('after the reset', data['obs'])
 

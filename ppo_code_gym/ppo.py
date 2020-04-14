@@ -200,6 +200,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     honest_logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
     # Set up experience buffer
+    local_actions_per_epoch = steps_per_epoch
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
     # buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
     #TODO: change the diff of params term
@@ -212,7 +213,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         pi, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         # print("logp: ", len(logp))
-        print("compute loss sizes of evertyhing", obs.shape, act.shape, adv.shape, logp_old.shape)
+        # print("compute loss sizes of evertyhing", obs.shape, act.shape, adv.shape, logp_old.shape)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
@@ -280,61 +281,104 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
+        sim_done = False
+        epoch_done = False
+        epoch_rewards = []
         round_len = 1
-        for t in range(local_steps_per_epoch):
+        while not epoch_done:       
             actions_list = []
             v_list = []
             logp_list = []
             for i, agent in enumerate(env.agents):
-                a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float))
+                ## Only take a step in the neural network if not committed
+                if type(agent.committed_value) is int:
+                    a, logp, v = agent.actionIndex, None, None
+                else:
+                    a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float))
+
                 actions_list.append(a)
                 v_list.append(v)
                 logp_list.append(logp)
 
-            next_o_list, r_list, d_list, info_n_list, sim_done = env.step(actions_list, round_len)
+            #Store the new values in the buffer
+            for ind, agent in enumerate(env.agents):
+                agentActionString =  agent.actionSpace[actions_list[ind]]
+                if 'commit' in agentActionString:
+                    agent.committed_value = int(agentActionString.split('_')[1])
+                
+                if type(agent.committed_value) is bool:
+                    buf.store(ind, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
+
+                elif type(agent.committed_value) is int and len(agent.last_action_etc.keys()) == 0:
+                    pass 
+                    #We handle this in the below step function, before all states are updated
+
+            # Update the environment for each agent and calculate rewards
+            next_o_list, r_list, d_list, info_n_list, sim_done = env.step(actions_list, v_list, logp_list, round_len)
             ep_ret += sum(r_list)
             ep_len += 1
 
-            # save and log
-            for ind, agent in enumerate(env.agents):
 
-                if type(agent.committed_value) is bool:
-                    buf.store(ind, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
-                    buf.store_reward(ind, agent.reward)
-
-
-            honest_logger.store(VVals=sum(v_list))
+            #Get v
+            v=0
+            for val in v_list:
+                if val is not None:
+                    v+=val
+            honest_logger.store(VVals=v)
             
-            # Update obs (critical!)
+            #Update obs
             o_list = next_o_list
 
-            timeout = ep_len == max_ep_len
-            terminal = sim_done or timeout
-            epoch_ended = t==local_steps_per_epoch-1
+            #Store new reward values
+            for ind, agent in enumerate(env.agents):
+                if type(agent.committed_value) is bool:
+                    buf.store_reward(ind, agent.reward)     
 
-            if terminal or epoch_ended:
-                if epoch_ended and not(terminal):
-                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                # if trajectory didn't reach terminal state, bootstrap value target
-                if timeout or epoch_ended:
-                    v = 0
-                    for ind, agent in enumerate(env.agents):
-                        _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float))
-                        v+=curr_v
-
-                        # _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.uint8))
-                    
-                else:
-                    v = 0
+            if sim_done:
                 buf.finish_sim(env.agents)
-                # buf.finish_path(v)
-                if terminal:
-                    # only save EpRet / EpLen if trajectory finished
-                    honest_logger.store(EpRet=ep_ret, EpLen=ep_len)
                 o_list, ep_ret, ep_len = env.reset(), 0, 0
-                round_len=0
+                round_len = 0
+                if buf.ptr > local_actions_per_epoch:
+                    epoch_done = True
 
             round_len+=1
+
+
+        honest_logger.store(EpRet=ep_ret, EpLen=ep_len)
+
+       # save and log
+
+
+
+            
+            # Update obs (critical!)
+
+            # timeout = ep_len == max_ep_len
+            # terminal = sim_done or timeout
+            # epoch_ended = t==local_steps_per_epoch-1
+
+            # if terminal or epoch_ended:
+            #     if epoch_ended and not(terminal):
+            #         print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
+            #     # if trajectory didn't reach terminal state, bootstrap value target
+            #     if timeout or epoch_ended:
+            #         v = 0
+            #         for ind, agent in enumerate(env.agents):
+            #             _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float))
+            #             v+=curr_v
+
+            #             # _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.uint8))
+                    
+            #     else:
+            #         v = 0
+            #     buf.finish_sim(env.agents)
+            #     # buf.finish_path(v)
+            #     if terminal:
+            #         # only save EpRet / EpLen if trajectory finished
+            #         honest_logger.store(EpRet=ep_ret, EpLen=ep_len)
+            #     o_list, ep_ret, ep_len = env.reset(), 0, 0
+            #     round_len=0
+
 
 
         # Save model
