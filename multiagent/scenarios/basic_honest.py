@@ -58,8 +58,8 @@ class Scenario(BaseScenario):
                     a.reward += params['termination_penalty']
                 elif type(a.committed_value) is bool and not a.isByzantine:
                     a.reward += params['additional_round_penalty']
-        if curr_sim_len == params['max_round_len']:
-            sim_done = True
+        # if curr_sim_len == params['max_round_len']:
+        #     sim_done = True
 
         #TODO: need to change this to a reward
         for i, agent in enumerate(world.agents):

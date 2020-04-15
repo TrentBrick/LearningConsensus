@@ -66,10 +66,13 @@ class MultiAgentPPOBuffer:
         for ind, agent in enumerate(agent_list): # indices and dictionaries for each agent. 
             store_dic = self.temp_buf[ind]
             # print("agent reward: ", agent.reward)
-            store_dic['obs'].append(agent.last_action_etc['obs'].numpy())
-            store_dic['act'].append(agent.last_action_etc['act'])
-            store_dic['val'].append(agent.last_action_etc['val'])
-            store_dic['logp'].append(agent.last_action_etc['logp'])
+            try:
+                store_dic['obs'].append(agent.last_action_etc['obs'].numpy())
+                store_dic['act'].append(agent.last_action_etc['act'])
+                store_dic['val'].append(agent.last_action_etc['val'])
+                store_dic['logp'].append(agent.last_action_etc['logp'])
+            except:
+                print("i am agent: ", agent.agentId)
 
             ##Add last reward
             store_dic['rew'].append(agent.reward) # adding the final reward that corresponds to each agents commit. has to be delayed until after each agent is finished. 
