@@ -13,6 +13,7 @@ from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from multiagent.make_env import make_env
 from ppo_code_gym.ppo import ppo as ppo_gym
+from ppo_code_gym.original_ppo import ppo as ppo_gym_og
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -39,9 +40,9 @@ def initialize_parameters():
     #parser.add_arguemnt("--action_space", type=int, action='store', nargs='+', default=[0,2], help='actions that agent can take - default is send init value and commit to a value')
     
     # Training Settings
-    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
-    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [1000], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [50], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [100], help='number of epochs')
+    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [4000], help='number of protocol simulations per epoch')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [25], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -138,10 +139,10 @@ def initialize_parameters():
         # ppo.ppo_algo(env, gamma=pg[i]['gamma'], 
         #     seed=pg[i]['random_seed'], actions_per_epoch=pg[i]['actions_per_epoch'], 
         #     epochs=pg[i]['epochs'])
-            #logger_kwargs=logger_kwargs)
+        #     # logger_kwargs=logger_kwargs)
         #### Code using gym #####
         env = make_env(params, "basic_honest")
-        ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=params['actions_per_epoch']*params['max_round_len'])
+        ppo_gym_og(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
         
         '''
         #receiving back results to store so that multiple iterations can be compared:

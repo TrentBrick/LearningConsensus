@@ -36,11 +36,13 @@ class MultiAgentEnv(gym.Env):
         # configure action space and observation for each agent - using MultiAgentUtils
         # TODO: does this work for Byzantine agents? they have a different sized action space. 
         # TODO: why is this a list with all the vectors for all the agents? 
-        self.action_space = MultiAgentActionSpace([spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
+        # self.action_space = spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
+        self.action_space = spaces.Discrete(self.agents[0].actionDims)
         # each agent has a vector of ints for the actions of themself and all other agents. it is in an int but call Box not discrete?? 
-        self.observation_space = MultiAgentObservationSpace([spaces.Box(0, 2, (self.n,), dtype=np.uint8) for _ in range(self.n)])
-        
+        # self.observation_space = MultiAgentObservationSpace([spaces.Box(0, 2, (self.n,), dtype=np.uint8) for _ in range(self.n)])
+        self.observation_space = spaces.Box(0, 2, (self.n,), dtype=np.uint8)
         # self.observation_space = []
+
         # self.action_space = []
         # for agent in self.agents:
         #     # May be useful to have this because agents could have different state sizes in the future
