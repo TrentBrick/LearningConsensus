@@ -102,7 +102,7 @@ def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver
     elif actionStr == 'send_to_all-value_init':
         return init_val
 
-    elif 'send_to_all-value_' in actionStr:
+    elif 'send_to_all-new-value_' in actionStr:
         return int(actionStr.split('_')[-1])
     
     elif 'agent-'+str(receiver_id) in actionStr:

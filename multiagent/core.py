@@ -16,6 +16,8 @@ class Honest_Agent:
         self.committed_ptr =  False
         self.reward = 0
 
+        self.majority_value = None
+
         self.initVal = give_inits[agentID]
         # self.initState = self.initAgentState(params, init_val, give_inits)
         #self.state = torch.tensor(self.initState).float()
@@ -36,7 +38,12 @@ class Honest_Agent:
         return torch.tensor(initState).int()
 
     def getHonestActionSpace(self, params):
-        honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
+        # honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
+        honest_action_space = []
+        honest_action_space.append('send_to_all-value_init')
+        for commit_val in params['commit_vals']:
+            honest_action_space.append('send_to_all-new-value_'+str(commit_val))
+            honest_action_space.append('commit_'+str(commit_val))
         return honest_action_space
 
 #multi-agent world
@@ -60,6 +67,8 @@ class World(object):
     def step(self):
         for agent in self.agents:
             self.update_agent_state(agent, self.agents)
+            agent.majorityValue = np.floor((sum(agent.state)/len(agent.state))+0.5)
+
 
     def update_agent_state(self, agent, agent_list):
         #Update the given agents state given what all the other agents actions are 
@@ -68,7 +77,7 @@ class World(object):
         for actor in agent_list:
             if agent.agentId == actor.agentId:
                 continue
-            new_state.append(actionEffect(self.params, actor.actionString, actor.initVal, agent.state[actor_ind], actor.agentId))
+            new_state.append(actionEffect(self.params, actor.actionString, actor.initVal, agent.state[actor_ind], agent.agentId))
             actor_ind +=1
         agent.state = torch.tensor(new_state).int()
 
