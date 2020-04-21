@@ -76,7 +76,7 @@ def initialize_parameters():
     parser.add_argument("--correct_commit", action ='store', type=float, default = [1.0], nargs='+')
     parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.3], nargs='+')
     parser.add_argument("--termination_penalty", action ='store', type=float, default = [-5.0], nargs='+')
-    parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = [.5], nargs='+')
+    parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = [.6], nargs='+')
     parser.add_argument("--send_incorrect_majority_value_penalty", action ='store', type=float, default = [-.3], nargs='+')
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')

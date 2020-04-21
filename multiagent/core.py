@@ -16,6 +16,8 @@ class Honest_Agent:
         self.committed_ptr =  False
         self.reward = 0
 
+        self.sentMajority = False
+
         self.majority_value = None
 
         self.initVal = give_inits[agentID]

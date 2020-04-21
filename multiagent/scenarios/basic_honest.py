@@ -39,10 +39,7 @@ class Scenario(BaseScenario):
             if type(agent.committed_value) is not int:
                 all_committed=False
             # Check commit values
-            if type(agent.committed_value) is int
-                if curr_sim_len < 3
-                    agent.reward+=-3
-                    break
+            if type(agent.committed_value) is int:
                 if agent.committed_value == world.majorityValue:
                     agent.reward += params['correct_commit']
                 else:
@@ -50,9 +47,10 @@ class Scenario(BaseScenario):
             ## Check majority values
             if curr_sim_len > 1 and type(agent.committed_value) is bool:
             ## Check sending of majority value
-                if 'send_to_all-new-value_' in agent.actionString:
+                if 'send_to_all-new-value_' in agent.actionString and not agent.sentMajority:
                     if int(agent.actionString.split('_')[-1]) == world.majorityValue:
                         agent.reward+= params['send_majority_value_reward']
+                        agent.sentMajority = True
                     else:
                         agent.reward+= params['send_incorrect_majority_value_penalty']
             ## Check
