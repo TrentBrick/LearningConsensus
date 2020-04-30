@@ -256,7 +256,7 @@ def ppo_algo(env, seed=0,
     print(' local actions per epoch', local_actions_per_epoch)
 
     temperature = 10.0
-    anneal_temperature = 0.98
+    anneal_temperature = 0.97
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):

@@ -197,6 +197,8 @@ class Agent:
         #print(real_logprobs)
         #should be able to apply sampling without computing this twice... 
         temperature_probs =  torch.nn.functional.softmax(logits/temperature, dim=1) 
+        if np.random.rand()>0.98:
+            print(temperature_probs)
         
         action_ind = torch.multinomial(temperature_probs, 1, replacement=False) # returns 1 sample per row. 
         

@@ -39,7 +39,7 @@ def initialize_parameters():
     
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [700], help='number of epochs')
-    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [2000], help='number of protocol simulations per epoch')
+    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [4000], help='number of protocol simulations per epoch')
     parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [1000], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
@@ -57,7 +57,7 @@ def initialize_parameters():
     
     parser.add_argument("--rl_algo_wanted", type=str, action='store', nargs='+', default = ['vpg'], help='')
     parser.add_argument("--gamma", type=float, action='store', nargs='+', default = [0.99], help='')
-    parser.add_argument("--lam", type=float, action='store', nargs='+', default = [0.95], help='')
+    parser.add_argument("--lam", type=float, action='store', nargs='+', default = [0.96], help='')
     parser.add_argument("--clip_ratio", type=float, action='store', nargs='+', default = [0.2], help='')
     parser.add_argument("--vf_lr", type=float, action='store', nargs='+', default = [0.001], help='')
     parser.add_argument("--train_policy_iters", type=int, action='store', nargs='+', default = [80], help='')
@@ -67,7 +67,7 @@ def initialize_parameters():
     parser.add_argument("--save_freq", type=int, action='store', nargs='+', default = [10], help='')
 
     ## Penalties for rewards
-    parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.3], nargs='+')
+    parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.7], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=float, default = [-1.0], nargs='+', help='from the perspective of the honest. The inverse is applied to the Byzantine')
     parser.add_argument("--validity_violation", action ='store', type=float, default = [-2.0], nargs='+')
     parser.add_argument("--majority_violation", action ='store', type=float, default = [-1.0], nargs='+')
@@ -80,7 +80,7 @@ def initialize_parameters():
     #parser.add_argument("--correct_commit", action ='store', type=str, default = [1,-1], nargs='+')
     
     ## NN Settings
-    parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.03], help='')
+    parser.add_argument("--learning_rate", type=float, action='store', nargs='+', default = [0.05], help='')
     parser.add_argument("--batch_size", type=int, action='store', nargs='+', default = [32], help='')
     parser.add_argument("--hidden_sizes", action ='store', type=str, default = ['(16,8)'], nargs='+', help = "Hidden sizes of neural net. -hidden_sizes (16,8) (2,3)")
     parser.add_argument("--activation", type=getActivation, action='store', nargs='+', default = [torch.tanh], help='Activation functions: tanh, relu, sigmoid')
