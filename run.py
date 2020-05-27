@@ -8,11 +8,11 @@ import torch
 import pandas as pd
 #import gym 
 import consensus_env
-import ppo_code.ppo as ppo
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from multiagent.make_env import make_env
 from ppo_code_gym.ppo import ppo as ppo_gym
+from ppo_code_gym.ppo_honestNoUpdate_byzantine import ppo as ppo_honestNoUpdate_byzantine
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -35,13 +35,15 @@ def initialize_parameters():
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
     parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [3], help='overall number of agents in simulation')
-    parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [0], help='overall number of byzantine agents in simulation')
+    parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [1], help='overall number of byzantine agents in simulation')
+    parser.add_argument("--sample_k_size", action ='store', type=float, default = [2], nargs='+')
+
     #parser.add_arguemnt("--action_space", type=int, action='store', nargs='+', default=[0,2], help='actions that agent can take - default is send init value and commit to a value')
     
     # Training Settings
-    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [500], help='number of epochs')
+    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [100], help='number of epochs')
     parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [4000], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [25], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [200], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -69,15 +71,22 @@ def initialize_parameters():
 
     ## Penalties for rewards
     parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.3], nargs='+')
-    parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = [-3.0], nargs='+')
+    parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = [-1.0], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=float, default = [-3.0], nargs='+', help='from the perspective of the honest. The inverse is applied to the Byzantine')
     parser.add_argument("--validity_violation", action ='store', type=float, default = [-3.0], nargs='+')
-    parser.add_argument("--majority_violation", action ='store', type=float, default = [-3.0], nargs='+')
-    parser.add_argument("--correct_commit", action ='store', type=float, default = [1.0], nargs='+')
-    parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.3], nargs='+')
-    parser.add_argument("--termination_penalty", action ='store', type=float, default = [-5.0], nargs='+')
+    parser.add_argument("--majority_violation", action ='store', type=float, default = [-25.0], nargs='+')
+    parser.add_argument("--correct_commit", action ='store', type=float, default = [1.1], nargs='+')
+    parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.1], nargs='+')
+    parser.add_argument("--termination_penalty", action ='store', type=float, default = [-3.0], nargs='+')
     parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = [.6], nargs='+')
     parser.add_argument("--send_incorrect_majority_value_penalty", action ='store', type=float, default = [-.3], nargs='+')
+
+    ###Byzantine Rewards
+    parser.add_argument("--honest_incorrect_commit", action ='store', type=float, default = [1], nargs='+')
+    parser.add_argument("--honest_correct_commit", action ='store', type=float, default = [-1], nargs='+')
+    parser.add_argument("--additional_round_reward", action ='store', type=float, default = [0.3], nargs='+')
+    parser.add_argument("--create_conflicting_state", action ='store', type=float, default = [.5], nargs='+')
+    parser.add_argument("--no_conflicting_state", action ='store', type=float, default = [-.3], nargs='+')
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
     #parser.add_argument("--validity_violation", action ='store', type=str, default = [-1,1], nargs='+')
@@ -130,21 +139,11 @@ def initialize_parameters():
         print('combo of params is:', pg[i])
         params = pg[i]
 
-        #### Code using old environment ######
-        # env = consensus_env.ConsensusEnv(pg[i])
-        # # should I be using gym.make here??
+        # env = make_env(params, "basic_honest")
+        # ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+        env = make_env(params, "honest_byzantine")
+        ppo_honestNoUpdate_byzantine(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
 
-        # ##Fork 
-        # mpi_fork(pg[i]['ncores'])
-        # # TODO: CHANGE core.MLPActorCritic when NN hidden layers are changed
-        # ppo.ppo_algo(env, gamma=pg[i]['gamma'], 
-        #     seed=pg[i]['random_seed'], actions_per_epoch=pg[i]['actions_per_epoch'], 
-        #     epochs=pg[i]['epochs'])
-        #     # logger_kwargs=logger_kwargs)
-        #### Code using gym #####
-        env = make_env(params, "basic_honest")
-        ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
-        
         '''
         #receiving back results to store so that multiple iterations can be compared:
         exp_dir, timestamp, last_honest_win, honest_90, honest_75, honest_50 = main.main(pg[i])  

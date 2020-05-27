@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/tmp/experiments/exp32-4-agents")
+    logger = EpochLogger(output_dir="/tmp/experiments/exp39-byzantine-sendEveryone-oneValueStats")
     logger.save_config(locals())
 
     # Random seed
@@ -110,7 +110,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     act_dim = env.action_space.shape
 
     # Create actor-critic module
-    # ac = torch.load('/tmp/experiments/exp29-save-honest/pyt_save/model.pt')
+    honest_ac = torch.load('/tmp/experiments/exp30-load-honest/pyt_save/model.pt')
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
 
     # Sync params across processes
@@ -122,7 +122,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = MultiAgentPPOBuffer(obs_dim, 1, local_steps_per_epoch, params['num_agents'])
+    buf = MultiAgentPPOBuffer(obs_dim, 1, local_steps_per_epoch, params['num_byzantine'])
 
     # Set up function for computing PPO policy loss
     def compute_loss_pi(data):
@@ -193,17 +193,23 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
     # Prepare for interaction with environment
     start_time = time.time()
-    o_list, ep_ret, ep_len = env.reset(), 0, 0
+    o_list, honest_ep_ret, byzantine_ep_ret, ep_len = env.reset(), 0, 0, 0
     
     # Main loop: collect experience in env and update/log each epoch
-    for epoch in range(epochs):
+    for epoch in range(epochs): 
         round_len = 1
         curr_ep_trajectory_log = []
         single_run_trajectory_log = setup_trajectory_log(env.agents)
         sims=0
         single_correct = 0
-        all_correct = 0
+        honest_wins = 0
+        byzantine_wins = 0
+        byzantine_majority = 0
+        byzantine_majority_wins = 0
+        byzantine_minority = 0
+        byzantine_minority_wins = 0
         rounds = 0
+        byzantine_action_dic = dict()
         for t in range(local_steps_per_epoch):
             actions_list = []
             v_list = []
@@ -212,7 +218,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if type(agent.committed_value) is int:
                     a, logp, v = agent.actionIndex, None, None
                 else:
-                    a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+                    if agent.isByzantine and epoch > 25:
+                        a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+                    else:
+                        a, v, logp = honest_ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+
 
                 actions_list.append(a)
                 v_list.append(v)
@@ -220,28 +230,38 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
             #Store new values in buffer
             for ind, agent in enumerate(env.agents):
-                agentActionString = agent.actionSpace[actions_list[ind]]
+                if not agent.isByzantine:
+                    continue
+                agentActionString =  agent.actionSpace[actions_list[ind]]
                 if 'commit' in agentActionString:
                     agent.committed_value = int(agentActionString.split('_')[1])
                 
                 if type(agent.committed_value) is bool:
-                    buf.store(ind, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
+                    buf.store(0, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
 
                 elif type(agent.committed_value) is int and len(agent.last_action_etc.keys()) == 0:
                     pass 
 
             next_o, r_list, d_list, info_n_list, sim_done = env.step(actions_list, v_list, logp_list, round_len)
-            ep_ret += sum(r_list)
+
+
             ep_len += 1
 
             #Log in trajectory
-            for agent in env.agents:
+            for agent in env.agents:                    
                 single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actionString))
            
             # Store new reward values
             for ind, agent in enumerate(env.agents):
-                if type(agent.committed_value) is bool:
-                    buf.store_reward(ind, agent.reward)
+                if not agent.isByzantine:
+                    honest_ep_ret+=r_list[ind]
+                    continue
+                if agent.actionString in byzantine_action_dic:
+                    byzantine_action_dic[agent.actionString]+=1
+                else:
+                    byzantine_action_dic[agent.actionString] = 1
+                byzantine_ep_ret += r_list[ind]
+                buf.store_reward(0, agent.reward)
 
             
             # Get v
@@ -259,20 +279,18 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             epoch_ended = t==local_steps_per_epoch-1
 
             if terminal or epoch_ended:
-                # if sim_done:
-                #     print("done list: ", d_list)
-                # for agent in env.agents:
-                #     print("I am: ", agent.actionString)
                 sims+=1
                 allCorrectCommit = True
-                for agent in env.agents:
+                for agent in env.honest_agents:
                     if agent.committed_value == env.majorityValue:
                         single_correct+=1
                     else:
                         allCorrectCommit = False
 
                 if allCorrectCommit:
-                    all_correct+=1
+                    honest_wins+=1
+                else:
+                    byzantine_wins+=1
 
                 if all(d_list):
                     single_run_trajectory_log['allCommit']+=1
@@ -291,13 +309,25 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 v = 0
                 if timeout or epoch_ended:
                     for ind, agent in enumerate(env.agents):
-                        _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+                        if agent.isByzantine:
+                            _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+                        else:
+                            _, curr_v, _ = honest_ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
                         v += curr_v
-                buf.finish_sim(env.agents)
+                buf.finish_sim(env.byzantine_agents)
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
-                    logger.store(EpRet=ep_ret, EpLen=ep_len)
-                o_list, ep_ret, ep_len = env.reset(), 0, 0
+                    if env.byzantine_agents[0].initVal == env.majorityValue and not env.world.one_value:
+                        byzantine_majority+=1
+                        if not allCorrectCommit:
+                            byzantine_majority_wins+=1
+                    else:
+                        byzantine_minority+=1
+                        if not allCorrectCommit:
+                            byzantine_minority_wins+=1
+                    
+                    logger.store(EpRet=honest_ep_ret, ByzantineEpRet = byzantine_ep_ret, EpLen=ep_len)
+                o_list, hoenst_ep_ret, byzantine_ep_ret, ep_len = env.reset(), 0, 0, 0
                 rounds+= round_len
                 round_len = 0
                 curr_ep_trajectory_log.append(single_run_trajectory_log)
@@ -313,6 +343,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 print(k, v)
                 print('---------')
             print("number of sims: ", sims)
+            print('---------')
+            print("action dic:")
+            for k, v in byzantine_action_dic.items():
+                print(k, v)
+                print('---------')
             print('=============================')
         # Save model
         if epoch == epochs-1:
@@ -322,11 +357,14 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         update()
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
-        logger.log_tabular('Sims', sims)
-        logger.log_tabular('CorrectCommits', single_correct)
-        logger.log_tabular('HonestWins', all_correct)
-        logger.log_tabular('WinPercentage', all_correct/sims)
+        # logger.log_tabular('Sims', sims)
+        # logger.log_tabular('CorrectCommits', single_correct)
+        logger.log_tabular('ByzantineWinPercentage', byzantine_wins/sims)
+        logger.log_tabular('ByzantineMajorityWinPercentage', byzantine_majority_wins/byzantine_majority)
+        logger.log_tabular('ByzantineMinorityWinPercentage', byzantine_minority_wins/byzantine_minority)
+        logger.log_tabular('HonestWinPercentage', honest_wins/sims)
         logger.log_tabular('AverageRounds', rounds/sims)
+        logger.log_tabular('ByzantineEpRet', with_min_and_max=True)
         logger.log_tabular('EpRet', with_min_and_max=True)
         logger.log_tabular('EpLen', average_only=True)
         logger.log_tabular('VVals', with_min_and_max=True)

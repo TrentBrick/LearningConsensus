@@ -15,6 +15,8 @@ class MultiAgentEnv(gym.Env):
         self.world = world
         self.params = params
         self.agents = self.world.policy_agents
+        self.honest_agents = self.world.honest_agents
+        self.byzantine_agents = self.world.byzantine_agents
 
         self.majorityValue = world.majorityValue
         # set required vectorized gym env property
@@ -35,13 +37,8 @@ class MultiAgentEnv(gym.Env):
         self.shared_reward = world.collaborative if hasattr(world, 'collaborative') else False
         self.time = 0
 
-        # configure action space and observation for each agent - using MultiAgentUtils
-        # TODO: does this work for Byzantine agents? they have a different sized action space. 
-        # TODO: why is this a list with all the vectors for all the agents? 
-        # self.action_space = spaces.Discrete(self.agents[0].actionDims) for _ in range(self.n)])
         self.action_space = spaces.Discrete(self.agents[0].actionDims)
-        # each agent has a vector of ints for the actions of themself and all other agents. it is in an int but call Box not discrete?? 
-        # self.observation_space = MultiAgentObservationSpace([spaces.Box(0, 2, (self.n,), dtype=np.uint8) for _ in range(self.n)])
+
         self.observation_space = spaces.Box(0, 2, (self.n,), dtype=np.uint8)
         # self.observation_space = []
 
@@ -58,6 +55,8 @@ class MultiAgentEnv(gym.Env):
         done_n = []
         info_n = {'n': []}
         self.agents = self.world.policy_agents
+        self.honest_agents = self.world.honest_agents
+        self.byzantine_agents = self.world.byzantine_agents
         # set action for each agent
         for ind, agent in enumerate(self.agents):
             self._set_action(action_n[ind], agent)
@@ -66,6 +65,8 @@ class MultiAgentEnv(gym.Env):
                 agent.last_action_etc['act'] = action_n[ind]
                 agent.last_action_etc['val'] = v_list[ind]
                 agent.last_action_etc['logp'] = logp_list[ind] 
+        for agent in self.honest_agents:
+            self._set_action()
         # advance world state
         self.world.step()
         # record reward for each agent
@@ -78,9 +79,9 @@ class MultiAgentEnv(gym.Env):
         # info_n['n'].append(self._get_info(agent))
 
         # all agents get total reward in cooperative case - may be good to add in the future
-        reward = np.sum(reward_n)
-        if self.shared_reward:
-            reward_n = [reward] * self.n
+        # reward = np.sum(reward_n)
+        # if self.shared_reward:
+        #     reward_n = [reward] * self.n
 
         return obs_n, reward_n, done_n, info_n, sim_done
 
@@ -118,12 +119,15 @@ class MultiAgentEnv(gym.Env):
 
     # set env action for a particular agent - this still needs to be configured
     def _set_action(self, action_index, agent):
-        agent.actionIndex = action_index
-        agent.actionString = agent.actionSpace[action_index]
-        
-        ###If commit in agents action space, then commit
-        if 'commit' in agent.actionString:
-            agent.committed_value = int(agent.actionString.split('_')[1])
+        if agent.actionCallback is not None:
+            
+        else:
+            agent.actionIndex = action_index
+            agent.actionString = agent.actionSpace[action_index]
+            
+            ###If commit in agents action space, then commit
+            if 'commit' in agent.actionString:
+                agent.committed_value = int(agent.actionString.split('_')[1])
 
     # reset rendering assets
     # def _reset_render(self):

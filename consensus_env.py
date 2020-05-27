@@ -90,11 +90,27 @@ def getByzantineActionSpace(params):
         #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
     return byz_action_space, byz_action_space_size#, byz_action_to_ind
 
-def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver_id):
+def actionEffect(params, agent_list, actionStr, init_val, actor_prev_action_result, receiver_id):
     # return the effects of a particular action
     #print('action string is ', actionStr)
     if actionStr == 'no_send':
         return params['null_message_val']
+
+    elif 'avalanche' in actionStr:
+        ## Sample agents that do not include itself
+        ## Initialize list to have receiver Id - will continuously update until we have k values that do not incldue receiver id
+        k_agents = [receiver_id]
+        while(receiver_id in k_agents):
+            k_agents = np.random.choice(np.arange(params['num_agents']), params['sample_k_size'], replace=False)
+        ##k_agents is now an array of size sample_k_size without receiver_id
+        ## Get lock value (first value in state) from each agent
+        lock_values = []
+        for agent_index in k_agents:
+            lock_values.append(agent_list[agent_index].state[0])
+        ##Get majority value
+        majority_val = np.floor((sum(lock_values)/len(lock_values))+0.5)
+        # majority_val = max(set(lock_values), key=lock_values.count)
+        return int(majority_val)
 
     elif 'commit' in actionStr: # keep returning the last state that the agent sent
         return actor_prev_action_result
@@ -102,7 +118,7 @@ def actionEffect(params, actionStr, init_val, actor_prev_action_result, receiver
     elif actionStr == 'send_to_all-value_init':
         return init_val
 
-    elif 'send_to_all-new-value_' in actionStr:
+    elif 'send_to-all' in actionStr:
         return int(actionStr.split('_')[-1])
     
     elif 'agent-'+str(receiver_id) in actionStr:

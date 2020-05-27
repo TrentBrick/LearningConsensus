@@ -20,15 +20,7 @@ class Scenario(BaseScenario):
 
     def setup_world(self, params):
         byzantine_inds = np.random.choice(range(params['num_agents']), size=params['num_byzantine'] ,replace=False)
-        # byzantine_index = byzantine_inds[0]
-        # majority_value = np.random.choice([0,1])
-        # minority_value = majority_value ^ 1
-        # give_inits = [majority_value, majority_value, minority_value]
-        # # print(give_inits)
-        # for i in range(5):
-        #     np.random.shuffle(give_inits)
-        # while give_inits[byzantine_index] is not majority_value:
-        #     np.random.shuffle(give_inits)
+
         give_inits = list(np.random.choice([0,1], params['num_agents']))
 
         one_value = False
@@ -174,4 +166,3 @@ class Scenario(BaseScenario):
 
 
 
-    

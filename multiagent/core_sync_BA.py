@@ -10,6 +10,7 @@ import torch
 class Honest_Agent:
 
     def __init__(self, params, agentId, give_inits):
+        self.isLeader = False
         self.isByzantine = False
         self.agentId = agentId
         self.actionSpace = self.getHonestActionSpace(params)
@@ -17,10 +18,6 @@ class Honest_Agent:
         self.stateDims = len(params['commit_vals'])+1 # +1 for the null value. 
         self.committed_ptr =  False
         self.reward = 0
-
-        self.sentMajority = False
-
-        self.majority_value = None
 
         self.initVal = give_inits[agentId]
         # self.initState = self.initAgentState(params, init_val, give_inits)
@@ -33,7 +30,7 @@ class Honest_Agent:
 
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
-        self.action_callback = None
+        self.action_callback = True
     
     def initAgentState(self, params, init_val, give_inits):
         initState = [init_val]
@@ -62,13 +59,8 @@ class Byzantine_Agent:
         self.committed_ptr =  False
         self.reward = 0
 
-        self.sentMajority = False
-
-        self.majority_value = None
-
         self.initVal = give_inits[agentId]
-        # self.initState = self.initAgentState(params, init_val, give_inits)
-        #self.state = torch.tensor(self.initState).float()
+
         self.state = self.initAgentState(params, self.initVal, give_inits)
         self.committed_value = False
 
@@ -145,8 +137,6 @@ class World(object):
     def step(self):
         for agent in self.agents:
             self.update_agent_state(agent, self.agents)
-            agent.majorityValue = np.floor((sum(agent.state)/len(agent.state))+0.5)
-
 
     def update_agent_state(self, agent, agent_list):
         #Update the given agents state given what all the other agents actions are 
