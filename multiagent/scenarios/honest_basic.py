@@ -14,6 +14,7 @@ class Scenario(BaseScenario):
         world.majorityValue = self.getMajority(world.agents)
 
         #Just placeholders to comply with environment needs
+        #TODO: fill these in. 
         world.honest_agents = []
         world.byzantine_agents = []
         return world
@@ -36,18 +37,20 @@ class Scenario(BaseScenario):
         # TODO: why is this needed? is world agents not already a list? 
         return [agent for agent in world.agents]
     
-    def reward(self, params, curr_sim_len, world):
+    def yash_reward(self, params, curr_sim_len, world):
         sim_done = False
         all_committed = True
         comm_values = []
         starting_values = []
         reward_list = []
+        # TODO: have rewards for the Byzantine. 
         for agent in world.agents:
             if type(agent.committed_value) is not int:
                 all_committed=False
             # Check commit values
             if type(agent.committed_value) is int:
                 if agent.committed_value == world.majorityValue:
+                    # dont think the agents should be rewarded individually for their commit value. 
                     agent.reward += params['correct_commit']
                 else:
                     agent.reward += params['majority_violation']
@@ -71,6 +74,83 @@ class Scenario(BaseScenario):
             sim_done = True
 
         return sim_done, reward_list
+
+    def reward(self, params, curr_sim_len, world): #agent_list, honest_list, ):
+    # checks to see if the honest parties have obtained both
+    # consistency and validity in addition to any other rewards
+
+        sim_done = False
+        # first check if all honest have committed and give the final reward if so
+        all_committed = True
+        comm_values = []
+        starting_values = [] # needed to check validity
+        reward_list = []
+        # TODO: use only the honest list. 
+        for h in world.agents: 
+            if type(h.committed_value) is not int:
+                all_committed = False
+                break
+            else: 
+                comm_values.append(h.committed_value)
+                starting_values.append(h.initVal)
+        
+        if all_committed: 
+            sim_done = True
+            honest_comm_reward, satisfied_constraints = self.getCommReward(params, comm_values, starting_values)
+            for i, a in enumerate(world.agents):
+                if not a.isByzantine:
+                    a.reward += honest_comm_reward
+                else: 
+                    a.reward -= honest_comm_reward
+
+        for i, a in enumerate(world.agents): 
+
+            # reward for sending to all in the first round
+            if a.isByzantine == False and curr_sim_len == 1 and 'send_to_all-' in a.actionString:
+                a.reward += params['send_all_first_round_reward']
+
+            # round length penalties. dont incur if the agent has committed though. 
+            if type(a.committed_value) is bool and not a.isByzantine:
+                if curr_sim_len < params['max_round_len']:
+                    a.reward += params['additional_round_penalty']
+                elif curr_sim_len >= params['max_round_len']:
+                    a.reward += params['termination_penalty']
+            elif a.isByzantine: 
+                if curr_sim_len < params['max_round_len']:
+                    a.reward -= params['additional_round_penalty']
+                elif curr_sim_len >= params['max_round_len']:
+                    a.reward -= params['termination_penalty']
+
+            reward_list.append(a.reward)
+
+        if curr_sim_len >= params['max_round_len']:
+            sim_done=True
+
+        return sim_done, reward_list
+
+    def getCommReward(self, params, comm_values, starting_values):
+
+        satisfied_constraints = False
+
+        if len(set(comm_values)) !=1:
+            return params['consistency_violation'], satisfied_constraints
+
+        # checking validity
+        if len(set(starting_values)) ==1:
+            # if they are all the same and they havent 
+            # agreed on the same value, then return -1
+            if starting_values != comm_values:   
+                return params['validity_violation'], satisfied_constraints
+
+        # want them to commit to the majority init value: 
+        if params['num_byzantine']==0:
+            majority_init_value = np.floor((sum(starting_values)/len(starting_values))+0.5)
+            if comm_values[0] != int(majority_init_value): # as already made sure they were all the same value. 
+                return params['majority_violation'], satisfied_constraints
+
+        satisfied_constraints=True
+        return params['correct_commit'], satisfied_constraints
+    
     # def reward(self, params, curr_sim_len, world):
     #     sim_done = False
     #     all_committed = True
@@ -160,27 +240,7 @@ class Scenario(BaseScenario):
     #         reward_list.append(agent.reward)
     #     return sim_done, reward_list
 
-    def getCommReward(self, params, comm_values, starting_values, majorityValue):
-
-        satisfied_constraints = False
-
-        if len(set(comm_values)) !=1:
-            return params['consistency_violation'], satisfied_constraints
-
-        # checking validity
-        if len(set(starting_values)) ==1:
-            # if they are all the same and they havent 
-            # agreed on the same value, then return -1
-            if starting_values != comm_values:   
-                return params['validity_violation'], satisfied_constraints
-
-        # want them to commit to the majority init value: 
-        if params['num_byzantine']==0:
-            if comm_values[0] != majorityValue: # as already made sure they were all the same value. 
-                return params['majority_violation'], satisfied_constraints
-
-        satisfied_constraints=True
-        return params['correct_commit'], satisfied_constraints
+    
 
     def observation(self, agent, world):
         return agent.state

@@ -42,9 +42,9 @@ def initialize_parameters():
     #parser.add_arguemnt("--action_space", type=int, action='store', nargs='+', default=[0,2], help='actions that agent can take - default is send init value and commit to a value')
     
     # Training Settings
-    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [100], help='number of epochs')
-    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [4000], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [200], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [200], help='number of epochs')
+    parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [6000], help='number of protocol simulations per epoch')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [80], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -71,14 +71,14 @@ def initialize_parameters():
     parser.add_argument("--save_freq", type=int, action='store', nargs='+', default = [10], help='')
 
     ## Penalties for rewards
-    parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.3], nargs='+')
+    parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [3.0], nargs='+')
     parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = [-1.0], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=float, default = [-3.0], nargs='+', help='from the perspective of the honest. The inverse is applied to the Byzantine')
     parser.add_argument("--validity_violation", action ='store', type=float, default = [-3.0], nargs='+')
-    parser.add_argument("--majority_violation", action ='store', type=float, default = [-25.0], nargs='+')
+    parser.add_argument("--majority_violation", action ='store', type=float, default = [-3.0], nargs='+')
     parser.add_argument("--correct_commit", action ='store', type=float, default = [1.1], nargs='+')
     parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.1], nargs='+')
-    parser.add_argument("--termination_penalty", action ='store', type=float, default = [-3.0], nargs='+')
+    parser.add_argument("--termination_penalty", action ='store', type=float, default = [-1000.0], nargs='+')
     parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = [.6], nargs='+')
     parser.add_argument("--send_incorrect_majority_value_penalty", action ='store', type=float, default = [-.3], nargs='+')
 
