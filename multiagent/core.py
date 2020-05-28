@@ -32,8 +32,9 @@ class Honest_Agent:
         self.actionString = ""
 
         self.last_action_etc = dict()
-        
+
         # can use this to create agents that don't react to the policy
+        # if None they they are able to react to the policy. 
         self.action_callback = None
     
     def initAgentState(self, params, init_val, give_inits):

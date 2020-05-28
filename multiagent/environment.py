@@ -65,8 +65,15 @@ class MultiAgentEnv(gym.Env):
                 agent.last_action_etc['act'] = action_n[ind]
                 agent.last_action_etc['val'] = v_list[ind]
                 agent.last_action_etc['logp'] = logp_list[ind] 
-        #for agent in self.honest_agents:
-        #    self._set_action()
+        
+        ''' # Yash, need to find a way to check this without using params as it currently isnt imported here. 
+        # should probably have some run.py command for whether or not the honest and or byznatine have forced actions. 
+
+        if params['scenario'] == 'honest_byzantine': # currently the honest are forced to make a specific action here
+            print('reminder that the honest are being forced to make actions here.')
+            for agent in self.honest_agents:
+                self._set_action()'''
+
         # advance world state
         self.world.step()
         # record reward for each agent

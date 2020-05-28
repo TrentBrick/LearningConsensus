@@ -10,7 +10,7 @@ from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from ppo_code_gym.buffer import MultiAgentPPOBuffer
 
-
+#TODO: drop the max_ep_len as it no longer does anything. 
 def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
@@ -204,7 +204,18 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         single_correct = 0
         all_correct = 0
         rounds = 0
-        for t in range(local_steps_per_epoch):
+
+        sim_done = False
+        epoch_done = False
+
+        while not epoch_done or not sim_done: # once we have taken the desired number of actions
+            #for the buffer AND this particular simulation is done. 
+
+            # see if this needs to be the last simulation: 
+            # TODO: set this to use the majority type of agent's buffer. 
+            if len(buf.obs_buf)>=local_steps_per_epoch: # (as t is 0 indexed)
+                epoch_done=True
+
             actions_list = []
             v_list = []
             logp_list = []
@@ -243,7 +254,6 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if type(agent.committed_value) is bool:
                     buf.store_reward(ind, agent.reward)
 
-            
             # Get v
             v=0
             for val in v_list:
@@ -254,11 +264,13 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             # Update obs (critical!)
             o_list = next_o
 
-            timeout = ep_len == max_ep_len
-            terminal = sim_done or timeout
-            epoch_ended = t==local_steps_per_epoch-1
+            #timeout = ep_len == max_ep_len # want to finish the last simulation
+            #terminal = sim_done or timeout
+            #epoch_ended = t==local_steps_per_epoch-1 # is this necessary as it will for loop until this point. 
 
-            if terminal or epoch_ended:
+            round_len += 1
+
+            if sim_done: #or epoch_ended:
                 # if sim_done:
                 #     print("done list: ", d_list)
                 # for agent in env.agents:
@@ -284,26 +296,25 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                         agent.last_action_etc['act'] = actions_list[ind]
                         agent.last_action_etc['val'] = v_list[ind]
                         agent.last_action_etc['logp'] = logp_list[ind]
-
-                if epoch_ended and not(terminal):
+                '''
+                if epoch_ended and not(sim_done):
                     print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                # if trajectory didn't reach terminal state, bootstrap value target
+                # if trajectory didn't reach sim_done state, bootstrap value target
                 v = 0
                 if timeout or epoch_ended:
                     for ind, agent in enumerate(env.agents):
                         _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
-                        v += curr_v
+                        v += curr_v'''
                 buf.finish_sim(env.agents)
-                if terminal:
+                #if sim_done:
                     # only save EpRet / EpLen if trajectory finished
-                    logger.store(EpRet=ep_ret, EpLen=ep_len)
+                logger.store(EpRet=ep_ret, EpLen=ep_len)
                 o_list, ep_ret, ep_len = env.reset(), 0, 0
                 rounds+= round_len
-                round_len = 0
+                round_len = 1
                 curr_ep_trajectory_log.append(single_run_trajectory_log)
                 single_run_trajectory_log = setup_trajectory_log(env.agents)
 
-            round_len += 1
 
         # Print model
         if (epoch % save_freq == 0) or (epoch == epochs-1):

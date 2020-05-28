@@ -142,10 +142,15 @@ def initialize_parameters():
 
         if params['scenario'] == 'honest_basic':
             env = make_env(params, "honest_basic")
-            ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+            ppo_gym(env, params, 
+                steps_per_epoch=params['actions_per_epoch']/params['ncores'], 
+                epochs=params['epochs'])
         elif params['scenario'] == 'honest_byzantine':
             env = make_env(params, "honest_byzantine")
-            ppo_honestNoUpdate_byzantine(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+            ppo_honestNoUpdate_byzantine(env, params, 
+                                        steps_per_epoch=params['actions_per_epoch']/params['ncores'], 
+                                        epochs=params['epochs'], 
+                                        max_ep_len=1000)
 
         else: 
             raise ValueError('Cannot recognize the scenario provided.')

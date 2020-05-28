@@ -18,7 +18,6 @@ class Scenario(BaseScenario):
         world.byzantine_agents = []
         return world
 
-
     def reset_world(self, params, world):
         give_inits = list(np.random.choice([0,1], params['num_agents']))
         world.agents = [Honest_Agent(params, i, give_inits) for i in range(params['num_agents'])]
