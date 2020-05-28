@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/tmp/experiments/exp32-4-agents")
+    logger = EpochLogger(output_dir=params['logger_dir']+'/'+params['exp_name'])
     logger.save_config(locals())
 
     # Random seed

@@ -1,0 +1,1 @@
+python -m spinup.run plot logger/*Directory*/ --xaxis=Epoch --value=WinPercentage

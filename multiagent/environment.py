@@ -65,8 +65,8 @@ class MultiAgentEnv(gym.Env):
                 agent.last_action_etc['act'] = action_n[ind]
                 agent.last_action_etc['val'] = v_list[ind]
                 agent.last_action_etc['logp'] = logp_list[ind] 
-        for agent in self.honest_agents:
-            self._set_action()
+        #for agent in self.honest_agents:
+        #    self._set_action()
         # advance world state
         self.world.step()
         # record reward for each agent
@@ -119,7 +119,8 @@ class MultiAgentEnv(gym.Env):
 
     # set env action for a particular agent - this still needs to be configured
     def _set_action(self, action_index, agent):
-        if agent.actionCallback is not None:
+        if agent.action_callback is not None:
+            pass
             
         else:
             agent.actionIndex = action_index

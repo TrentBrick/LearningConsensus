@@ -19,6 +19,7 @@ def initialize_parameters():
     # Experiment Settings
     parser.add_argument("--exp_name", type=str, action='store', nargs='+', default=["TestRun"], help="name of experiment")
     parser.add_argument("--directory", type=str, action='store', nargs='+', default = ["runs/"], help='directory to save results in')
+    parser.add_argument("--logger_dir", type=str, action='store', nargs='+', default = ["logger/"], help='directory to save the logger results to')
     parser.add_argument("--random_seed", type=int, action='store', nargs='+', default = [27], help='seed to start the simulation from')
     parser.add_argument("--ncores", type=int, action='store', nargs='+', default = [1], help='number of cores to use. if -1 then it uses all of them. ')
 
@@ -32,7 +33,7 @@ def initialize_parameters():
     parser.add_argument("--byz_honest_train_ratio", type=int, action='store', nargs='+', default = [1], help='Ratio of epochs we train byzantine for 1 honest. A value of 1 means has no ratio training')
 
     # Environment Settings
-    parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['Basic'], help='')
+    parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['honest_basic'], help='What scenario is desired? honest_basic, honest_byzantine and honest_byzantine_pki are current options as of May 28th.')
     parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [3], help='overall number of agents in simulation')
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [1], help='overall number of byzantine agents in simulation')
@@ -139,10 +140,15 @@ def initialize_parameters():
         print('combo of params is:', pg[i])
         params = pg[i]
 
-        # env = make_env(params, "basic_honest")
-        # ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
-        env = make_env(params, "honest_byzantine")
-        ppo_honestNoUpdate_byzantine(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+        if params['scenario'] == 'honest_basic':
+            env = make_env(params, "honest_basic")
+            ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+        elif params['scenario'] == 'honest_byzantine':
+            env = make_env(params, "honest_byzantine")
+            ppo_honestNoUpdate_byzantine(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+
+        else: 
+            raise ValueError('Cannot recognize the scenario provided.')
 
         '''
         #receiving back results to store so that multiple iterations can be compared:
