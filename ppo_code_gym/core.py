@@ -71,6 +71,11 @@ class MLPCategoricalActor(Actor):
 
     def _distribution(self, obs):
         logits = self.logits_net(obs)
+        obs_numpy = obs.numpy().tolist()
+        for index in range(5,13):
+            if obs_numpy[index] == 1:
+                # print("item is 1")
+                logits[index-5] = 0
         return Categorical(logits=logits)
 
     def _log_prob_from_distribution(self, pi, act):
@@ -107,7 +112,6 @@ class MLPCritic(nn.Module):
 
 class MLPActorCritic(nn.Module):
 
-    #### Changed hidden sizes to 16,8
     def __init__(self, observation_space, action_space, 
                  hidden_sizes=(16,8), activation=nn.Tanh):
         super().__init__()
@@ -130,6 +134,7 @@ class MLPActorCritic(nn.Module):
             a = pi.sample()
             logp_a = self.pi._log_prob_from_distribution(pi, a)
             v = self.v(obs)
+
         return a.numpy(), v.numpy(), logp_a.numpy()
 
     def act(self, obs):

@@ -4,7 +4,7 @@ import torch
 from torch.optim import Adam
 import gym
 import time
-import spinup.algos.pytorch.ppo.core as core
+import ppo_code_gym.core as core
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
@@ -96,8 +96,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/tmp/experiments/exp49-byzantine-sendEveryone-oneValueStats")
-    # logger.save_config(locals())
+    logger = EpochLogger(output_dir="/tmp/experiments/exp55-syncBA-equivocate")
+    logger.save_config(locals())
 
     # Random seed
     seed += 10000 * proc_id()
@@ -112,9 +112,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     print(act_dim)
     print(env.observation_space)
     print(env.action_space)
-
     # Create actor-critic module
-    # honest_ac = torch.load('/tmp/experiments/exp30-load-honest/pyt_save/model.pt')
+    # ac = torch.load('/tmp/experiments/exp46-syncBA-3Round-equiv/pyt_save/model.pt')
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
 
     # Sync params across processes
@@ -203,16 +202,13 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     for epoch in range(epochs): 
         round_len = 1
         curr_ep_trajectory_log = []
+        prev_ep_trajectory_log = []
         single_run_trajectory_log = setup_trajectory_log(env.agents)
         sims=0
-        single_correct = 0
         honest_wins = 0
         byzantine_wins = 0
-        byzantine_majority = 0
-        byzantine_majority_wins = 0
-        byzantine_minority = 0
-        byzantine_minority_wins = 0
         rounds = 0
+        same_action = 0
         byzantine_action_dic = dict()
         for t in range(local_steps_per_epoch):
             actions_list = []
@@ -222,11 +218,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if type(agent.committed_value) is int:
                     a, logp, v = agent.actionIndex, None, None
                 else:
-                    if agent.isByzantine and epoch > 25:
-                        a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
-                    else:
-                        a, v, logp = honest_ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
-
+                    a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
 
                 actions_list.append(a)
                 v_list.append(v)
@@ -245,9 +237,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
                 elif type(agent.committed_value) is int and len(agent.last_action_etc.keys()) == 0:
                     pass 
-
+            
             next_o, r_list, d_list, info_n_list, sim_done = env.step(actions_list, v_list, logp_list, round_len)
-
+            if round_len == 2:
+                if env.byzantine_agents[0].prevActionString == env.byzantine_agents[0].actionString:
+                    same_action+=1
 
             ep_len += 1
 
@@ -257,9 +251,6 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
            
             # Store new reward values
             for ind, agent in enumerate(env.agents):
-                if not agent.isByzantine:
-                    honest_ep_ret+=r_list[ind]
-                    continue
                 if agent.actionString in byzantine_action_dic:
                     byzantine_action_dic[agent.actionString]+=1
                 else:
@@ -285,16 +276,19 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             if terminal or epoch_ended:
                 sims+=1
                 allCorrectCommit = True
-                for agent in env.honest_agents:
-                    if agent.committed_value == env.majorityValue:
-                        single_correct+=1
-                    else:
-                        allCorrectCommit = False
+                comm_values = []
 
-                if allCorrectCommit:
+                for agent in env.honest_agents:
+                    comm_values.append(agent.committed_value)
+                # print(comm_values)
+                if (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values):
                     honest_wins+=1
                 else:
                     byzantine_wins+=1
+                # if len(set(comm_values)) is 1:
+                #     honest_wins+=1
+                # else:
+                #     byzantine_wins+=1
 
                 if all(d_list):
                     single_run_trajectory_log['allCommit']+=1
@@ -313,27 +307,16 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 v = 0
                 if timeout or epoch_ended:
                     for ind, agent in enumerate(env.agents):
-                        if agent.isByzantine:
-                            _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
-                        else:
-                            _, curr_v, _ = honest_ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+                        _, curr_v, _ = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
                         v += curr_v
                 buf.finish_sim(env.byzantine_agents)
+                
                 if terminal:
-                    # only save EpRet / EpLen if trajectory finished
-                    if env.byzantine_agents[0].initVal == env.majorityValue and not env.world.one_value:
-                        byzantine_majority+=1
-                        if not allCorrectCommit:
-                            byzantine_majority_wins+=1
-                    else:
-                        byzantine_minority+=1
-                        if not allCorrectCommit:
-                            byzantine_minority_wins+=1
-                    
-                    logger.store(EpRet=honest_ep_ret, ByzantineEpRet = byzantine_ep_ret, EpLen=ep_len)
-                o_list, hoenst_ep_ret, byzantine_ep_ret, ep_len = env.reset(), 0, 0, 0
+                    logger.store(EpRet=byzantine_ep_ret, ByzantineEpRet = byzantine_ep_ret, EpLen=ep_len)
+                o_list, byzantine_ep_ret, ep_len = env.reset(), 0, 0
                 rounds+= round_len
                 round_len = 0
+                prev_ep_trajectory_log = curr_ep_trajectory_log[:]
                 curr_ep_trajectory_log.append(single_run_trajectory_log)
                 single_run_trajectory_log = setup_trajectory_log(env.agents)
 
@@ -342,8 +325,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         # Print model
         if (epoch % save_freq == 0) or (epoch == epochs-1):
             print('=============================')
-            print('last trajectory from this epoch:')
-            for k, v in curr_ep_trajectory_log[-1].items():
+            print('second to last trajectory from this epoch:')
+            for k, v in prev_ep_trajectory_log[-1].items():
                 print(k, v)
                 print('---------')
             print("number of sims: ", sims)
@@ -363,12 +346,10 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         logger.log_tabular('Epoch', epoch)
         # logger.log_tabular('Sims', sims)
         # logger.log_tabular('CorrectCommits', single_correct)
+        logger.log_tabular('Same Action', same_action)
         logger.log_tabular('ByzantineWinPercentage', byzantine_wins/sims)
-        logger.log_tabular('ByzantineMajorityWinPercentage', byzantine_majority_wins/byzantine_majority)
-        logger.log_tabular('ByzantineMinorityWinPercentage', byzantine_minority_wins/byzantine_minority)
         logger.log_tabular('HonestWinPercentage', honest_wins/sims)
         logger.log_tabular('AverageRounds', rounds/sims)
-        logger.log_tabular('ByzantineEpRet', with_min_and_max=True)
         logger.log_tabular('EpRet', with_min_and_max=True)
         logger.log_tabular('EpLen', average_only=True)
         logger.log_tabular('VVals', with_min_and_max=True)

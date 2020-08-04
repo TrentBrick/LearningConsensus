@@ -13,6 +13,7 @@ from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_sc
 from multiagent.make_env import make_env
 from ppo_code_gym.ppo import ppo as ppo_gym
 from ppo_code_gym.ppo_honestNoUpdate_byzantine import ppo as ppo_honestNoUpdate_byzantine
+from ppo_code_gym.ppo_syncBA import ppo as ppo_syncBA
 
 def initialize_parameters():
     parser = argparse.ArgumentParser()
@@ -33,7 +34,7 @@ def initialize_parameters():
     parser.add_argument("--byz_honest_train_ratio", type=int, action='store', nargs='+', default = [1], help='Ratio of epochs we train byzantine for 1 honest. A value of 1 means has no ratio training')
 
     # Environment Settings
-    parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['honest_basic'], help='What scenario is desired? honest_basic, honest_byzantine and honest_byzantine_pki are current options as of May 28th.')
+    parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['sync_BA'], help='What scenario is desired? honest_basic, honest_byzantine and honest_byzantine_pki are current options as of May 28th.')
     parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [3], help='overall number of agents in simulation')
     parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [1], help='overall number of byzantine agents in simulation')
@@ -44,7 +45,7 @@ def initialize_parameters():
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [100], help='number of epochs')
     parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [4000], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [200], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [3], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -70,24 +71,32 @@ def initialize_parameters():
     # parser.add_argument("--logger_kwargs", type=dict(), action='store', nargs='+', default = [dict()], help='')
     parser.add_argument("--save_freq", type=int, action='store', nargs='+', default = [10], help='')
 
-    ## Penalties for rewards
+    ## Penalties for rewards ##
     parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = [0.3], nargs='+')
     parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = [-1.0], nargs='+')
     parser.add_argument("--consistency_violation", action ='store', type=float, default = [-3.0], nargs='+', help='from the perspective of the honest. The inverse is applied to the Byzantine')
     parser.add_argument("--validity_violation", action ='store', type=float, default = [-3.0], nargs='+')
     parser.add_argument("--majority_violation", action ='store', type=float, default = [-25.0], nargs='+')
-    parser.add_argument("--correct_commit", action ='store', type=float, default = [1.1], nargs='+')
+    parser.add_argument("--correct_commit", action ='store', type=float, default = [-1.0], nargs='+')
+    parser.add_argument("--incorrect_commit", action ='store', type=float, default = [1.0], nargs='+')
     parser.add_argument("--additional_round_penalty", action ='store', type=float, default = [-0.1], nargs='+')
     parser.add_argument("--termination_penalty", action ='store', type=float, default = [-3.0], nargs='+')
     parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = [.6], nargs='+')
     parser.add_argument("--send_incorrect_majority_value_penalty", action ='store', type=float, default = [-.3], nargs='+')
+    # Sync BA Rewards
+    parser.add_argument("--first_round_reward", action ='store', type=float, default = [0], nargs='+')
+    parser.add_argument("--PKI_penalty", action ='store', type=float, default = [-1], nargs='+')
+    parser.add_argument("--PKI_reward", action ='store', type=float, default = [.25], nargs='+')
+
 
     ###Byzantine Rewards
     parser.add_argument("--honest_incorrect_commit", action ='store', type=float, default = [1], nargs='+')
     parser.add_argument("--honest_correct_commit", action ='store', type=float, default = [-1], nargs='+')
     parser.add_argument("--additional_round_reward", action ='store', type=float, default = [0.3], nargs='+')
-    parser.add_argument("--create_conflicting_state", action ='store', type=float, default = [.5], nargs='+')
-    parser.add_argument("--no_conflicting_state", action ='store', type=float, default = [-.3], nargs='+')
+    parser.add_argument("--no_equivocation_reward", action ='store', type=float, default = [.3], nargs='+')
+    parser.add_argument("--equivocation_penalty", action ='store', type=float, default = [-.3], nargs='+')
+    parser.add_argument("--termination-reward", action='store', type=float, default=[25], nargs='+')
+
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
     #parser.add_argument("--validity_violation", action ='store', type=str, default = [-1,1], nargs='+')
@@ -146,7 +155,10 @@ def initialize_parameters():
         elif params['scenario'] == 'honest_byzantine':
             env = make_env(params, "honest_byzantine")
             ppo_honestNoUpdate_byzantine(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
-
+        elif params['scenario'] == 'sync_BA':
+            env = make_env(params, "sync_BA")
+            ppo_syncBA(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
+ 
         else: 
             raise ValueError('Cannot recognize the scenario provided.')
 

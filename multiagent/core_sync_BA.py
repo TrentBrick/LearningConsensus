@@ -1,5 +1,5 @@
 import numpy as np 
-from consensus_env import getActionSpace, actionEffect
+from consensus_env import getActionSpace, actionEffect, sync_BA_effect  
 import itertools
 from collections import OrderedDict
 
@@ -13,17 +13,12 @@ class Honest_Agent:
         self.isLeader = False
         self.isByzantine = False
         self.agentId = agentId
-        self.actionSpace = self.getHonestActionSpace(params)
-        self.actionDims = len(self.actionSpace)
         self.stateDims = len(params['commit_vals'])+1 # +1 for the null value. 
         self.committed_ptr =  False
         self.reward = 0
 
-        self.initVal = give_inits[agentId]
-        # self.initState = self.initAgentState(params, init_val, give_inits)
-        #self.state = torch.tensor(self.initState).float()
-        self.state = self.initAgentState(params, self.initVal, give_inits)
-        self.committed_value = False
+        self.state = self.initAgentState(params, give_inits)
+        self.committed_value = -1
 
         self.actionIndex = None
         self.actionString = ""
@@ -31,22 +26,16 @@ class Honest_Agent:
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = True
+        self.isLeader = False
+        self.proposeValue = params['null_message_val']
+        self.statusValue = params['null_message_val']
     
-    def initAgentState(self, params, init_val, give_inits):
-        initState = [init_val]
-        for a in range(params['num_agents']-1):
+    def initAgentState(self, params, give_inits):
+        initState = []
+        for a in range(params['num_agents']):
             initState.append(params['null_message_val'])
         return torch.tensor(initState).int()
 
-    def getHonestActionSpace(self, params):
-        # honest_action_space = getActionSpace(params, False, byzantine_inds=None, can_send_either_value=params['honest_can_send_either_value'])
-        honest_action_space = []
-        honest_action_space.append('send_to_all-value_init')
-        # honest_action_space.append('sample_k_avalanche')
-        for commit_val in params['commit_vals']:
-            # honest_action_space.append('send_ll_'+str(commit_val))
-            honest_action_space.append('commit_'+str(commit_val))
-        return honest_action_space
 
 class Byzantine_Agent:
 
@@ -59,24 +48,52 @@ class Byzantine_Agent:
         self.committed_ptr =  False
         self.reward = 0
 
-        self.initVal = give_inits[agentId]
+        self.proposeValue = params['null_message_val']
+        self.statusValue = params['null_message_val']
 
-        self.state = self.initAgentState(params, self.initVal, give_inits)
+
         self.committed_value = False
 
         self.actionIndex = None
         self.actionString = ""
+        self.prevActionString = ""
 
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = None
+        self.isLeader = True
+
+        state = self.initAgentState(params, give_inits)
+        if self.isLeader:
+            state.append(1)
+        else:
+            state.append(0)
+
+        #No send
+        # 2 actions where send something different
+        state = (state + [0]*5)
+        state.append(1)
+        state.append(0)
+        state.append(1)
+        state.append(0)
+        # state = (state + [0]*6)
+        self.state = torch.tensor(state).int()
+        # print(self.state)
+    
 
 
-    def initAgentState(self, params, init_val, give_inits):
-        initState = [init_val]
-        for a in range(params['num_agents']-1):
+
+
+    def initAgentState(self, params, give_inits):
+        initState = []
+        for a in range(params['num_agents']):
             initState.append(params['null_message_val'])
-        return torch.tensor(initState).int()
+        
+        ## Append for round
+        initState.append(1)
+
+        #Leader can send anything in the first round
+        return initState
 
     def getByzantineActionSpace(self, params, byzantine_inds):
         action_space = []
@@ -109,9 +126,18 @@ class Byzantine_Agent:
                     action_space.append( string )
         # remove any redundancies in a way that preserves order.
         action_space = list(OrderedDict.fromkeys(action_space))
-
+        # print(action_space)
+        # print(action_space)
         # Only give option to send to two agents 
-        action_space = action_space[5:]
+        # action_space = action_space[1:5]
+
+        # rounds = ['propose_', 'vote_', 'status_']
+        # prefix_action_space = []
+        # for prefix in rounds:
+        #     for action in action_space:
+        #         prefix_action_space.append(prefix+action)
+        # print(action_space)
+        # action_space = action_space[5:]
 
         return action_space
         
@@ -134,19 +160,50 @@ class World(object):
     def scripted_agents(self):
         return [agent for agent in self.agents if agent.action_callback is not None]
 
-    def step(self):
-        for agent in self.agents:
-            self.update_agent_state(agent, self.agents)
+    def step(self, curr_sim_len):
+        if (curr_sim_len < 3):
+            for agent in self.agents:
+                self.update_agent_state(agent, self.agents, curr_sim_len)
+        
+        ## Based on the actions of the other two honest agents, limit the action space
+        # if curr_sim_len is 1:
+            ## Can't send different value from what it sent previously 
 
-    def update_agent_state(self, agent, agent_list):
+                
+
+    def update_agent_state(self, agent, agent_list, curr_sim_len):
         #Update the given agents state given what all the other agents actions are 
         actor_ind = 1
-        new_state = [agent.initVal] # keep track of the agent's initial value
+        new_state = [agent.proposeValue] # keep track of the agent's initial value
         for actor in agent_list:
             if agent.agentId == actor.agentId:
                 continue
-            new_state.append(actionEffect(self.params, self.agents, actor.actionString, actor.initVal, agent.state[actor_ind], agent.agentId))
+            new_state.append(sync_BA_effect(self.params, self.agents, actor.actionString, agent.state[actor_ind], agent.agentId, curr_sim_len))
             actor_ind +=1
+        
+        #Update initial value - can't override this value later when the byzantine sends it 
+        if curr_sim_len == 1 and not agent.isLeader:
+            for val in new_state:
+                if val != self.params['null_message_val']:
+                    new_state[0] = val
+                    agent.proposeValue = val
+        
+        if agent.isByzantine:
+            new_state.append(curr_sim_len)
+            
+            if agent.isLeader:
+                new_state.append(1)
+            else:
+                new_state.append(0)
+
+            new_state = (new_state + [0]*5)
+            new_state.append(1)
+            new_state.append(0)
+            new_state.append(1)
+            new_state.append(0)
+            # print('sim is: ', curr_sim_len)
+            # print(new_state)
+            
         agent.state = torch.tensor(new_state).int()
 
 

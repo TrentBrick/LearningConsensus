@@ -1,5 +1,5 @@
 from multiagent.scenario import BaseScenario
-from multiagent.core import World, Honest_Agent, Byzantine_Agent
+from multiagent.core_sync_BA import World, Honest_Agent, Byzantine_Agent
 import numpy as np
 import torch
 
@@ -8,15 +8,20 @@ class Scenario(BaseScenario):
 
     def make_world(self, params):
         world = World(params)
-        
-        world.agents, world.honest_agents, world.byzantine_agents, world.one_value = self.setup_world(params)
-        world.majorityValue = self.getMajority(world.agents)
+    
+        world.agents, world.honest_agents, world.byzantine_agents = self.setup_world(params)
+
+        world.byzantineEquivocate = False
+        #Majority value is irrelevant right now - will be used later 
+        world.majorityValue = -1
         return world
 
 
     def reset_world(self, params, world):
-        world.agents, world.honest_agents, world.byzantine_agents, world.one_value = self.setup_world(params)
-        world.majorityValue = self.getMajority(world.agents)
+        world.agents, world.honest_agents, world.byzantine_agents = self.setup_world(params)
+
+        world.byzantineEquivocate = False
+        world.majorityValue = -1
 
     def setup_world(self, params):
         byzantine_inds = np.random.choice(range(params['num_agents']), size=params['num_byzantine'] ,replace=False)
@@ -24,18 +29,16 @@ class Scenario(BaseScenario):
         give_inits = list(np.random.choice([0,1], params['num_agents']))
 
         one_value = False
-        if len(set(give_inits)) is 1:
+        if len(set(give_inits)) == 1:
             one_value = True
 
         honest_agents = []
         byzantine_agents = []
-        byzantine_state = [give_inits[byzantine_inds[0]]]
         agents = []
         for i in range(params['num_agents']):
             if i in byzantine_inds:
                 byzantine_agents.append(Byzantine_Agent(params, i, give_inits, byzantine_inds))
             else:
-                byzantine_state.append(int(give_inits[i]))
                 honest_agents.append(Honest_Agent(params, i, give_inits))
                 
         # Append agents to global agent list
@@ -43,11 +46,7 @@ class Scenario(BaseScenario):
         agents.extend(byzantine_agents)
 
         # Initialize byzantine to have the global state
-        byzantine_agents[0].state = torch.tensor(byzantine_state).int()
-        # print("byzantine id: ", byzantine_agents[0].agentId)
-        # print("byzantine state: ", byzantine_agents[0].state)
-        # print("give_inits: ", give_inits)
-        return agents, honest_agents, byzantine_agents, one_value
+        return agents, honest_agents, byzantine_agents
 
     def benchmark_data(self, agent, world):
         #Create this method later
@@ -60,82 +59,45 @@ class Scenario(BaseScenario):
     
     def reward(self, params, curr_sim_len, world):
         sim_done = False
-        all_committed = True
-        comm_values = []
-        starting_values = []
         reward_list = []
-        for agent in world.honest_agents:
-            if type(agent.committed_value) is not int:
-                all_committed=False
-            # Check commit values
-            if type(agent.committed_value) is int:
-                comm_values.append(agent.committed_value)
-                if agent.committed_value == world.majorityValue:
-                    agent.reward += params['correct_commit']
-                else:
-                    agent.reward += params['majority_violation']
-            ## Check not committing in first round
+        for byz_agent in world.byzantine_agents:
             if curr_sim_len == 1:
-                if 'commit' in agent.actionString:
-                    agent.reward += params['no_send_all_first_round_penalty']
-                if 'send_to_all-new-value_' in agent.actionString:
-                    sendVal = int(agent.actionString.split('_')[-1])
-                    if sendVal != agent.initVal:
-                        agent.reward += params['no_send_all_first_round_penalty']
-            # Penalties for not committing yet
-            if  type(agent.committed_value) is bool:
-                if curr_sim_len < params['max_round_len']:
-                    agent.reward += params['additional_round_penalty']
-                elif curr_sim_len == params['max_round_len']:
-                    agent.reward += params['termination_penalty']
-            
-        if all_committed or curr_sim_len == params['max_round_len']:
-            sim_done = True
-
-        for agent in world.byzantine_agents:
-            if all_committed:
-                if len(set(comm_values)) == 1 and comm_values[0] == world.majorityValue:
-                    agent.reward += params['honest_correct_commit']
-                else:
-                    agent.reward += params['honest_incorrect_commit']
-            else:
-                majority_values = []
-                sent_values = True
+                # byz_agent.reward += params['first_round_reward']
+                if world.byzantineEquivocate:
+                    byz_agent.reward += params['equivocation_penalty']
+            if curr_sim_len == 2:
+                # pass
+                if world.byzantineEquivocate:
+                    byz_agent.reward += params['equivocation_penalty']
+                # if byz_agent.prevActionString != byz_agent.actionString:
+                #     byz_agent.reward += params['PKI_penalty']
+                # else:
+                #     byz_agent.reward += params['PKI_reward']
+                # for agent in world.honest_agents:
+            if curr_sim_len == 3:
+                comm_values = []
                 for agent in world.honest_agents:
-                    majority_values.append(self.getAgentMajority(agent))
-                if sent_values:
-                    if len(set(majority_values)) == 1:
-                        agent.reward += params['create_conflicting_state']
-                    else:
-                        agent.reward += params['no_conflicting_state']
+                    comm_values.append(agent.committed_value)
+                
+                #If one agent has committed and the other hasn't, give a reward
+                if -1 in comm_values and (1 in comm_values or 0 in comm_values):
+                    byz_agent.reward += params['termination_reward']
+                # elif len(set(comm_values)) is 1:
+                #     byz_agent.reward += params['honest_correct_commit']
+                elif (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values):
+                    byz_agent.reward += params['honest_correct_commit']
+                # else:
+                #     byz_agent.reward += params['honest_incorrect_commit']
+                # else:
+                #     byz_agent.reward += params['honest_incorrect_commit']
         
-        for agent in world.agents:
+        for agent in world.byzantine_agents:
             reward_list.append(agent.reward)
 
+        if curr_sim_len == params['max_round_len']:
+            sim_done = True
+
         return sim_done, reward_list
-
-
-    def getCommReward(self, params, comm_values, starting_values, majorityValue):
-
-        satisfied_constraints = False
-
-        if len(set(comm_values)) !=1:
-            return params['consistency_violation'], satisfied_constraints
-
-        # checking validity
-        if len(set(starting_values)) ==1:
-            # if they are all the same and they havent 
-            # agreed on the same value, then return -1
-            if starting_values != comm_values:   
-                return params['validity_violation'], satisfied_constraints
-
-        # want them to commit to the majority init value: 
-        if params['num_byzantine']==0:
-            if comm_values[0] != majorityValue: # as already made sure they were all the same value. 
-                return params['majority_violation'], satisfied_constraints
-
-        satisfied_constraints=True
-        return params['correct_commit'], satisfied_constraints
 
     def observation(self, agent, world):
         return agent.state
@@ -158,8 +120,6 @@ class Scenario(BaseScenario):
 
 
 
-
-    
 
     
 

@@ -143,7 +143,7 @@ class World(object):
     def scripted_agents(self):
         return [agent for agent in self.agents if agent.action_callback is not None]
 
-    def step(self):
+    def step(self, curr_sim_len):
         for agent in self.agents:
             self.update_agent_state(agent, self.agents)
             agent.majorityValue = np.floor((sum(agent.state)/len(agent.state))+0.5)

@@ -90,6 +90,28 @@ def getByzantineActionSpace(params):
         #byz_action_to_ind = {a:ind for ind, a in enumerate(byz_action_space)}
     return byz_action_space, byz_action_space_size#, byz_action_to_ind
 
+def sync_BA_effect(params, agent_list, actionStr, actor_prev_action_result, receiver_id, curr_sim_len):
+    if curr_sim_len == 1:
+        if actionStr == 'pass':
+            return params['null_message_val']
+        else:
+            if 'agent-' + str(receiver_id) in actionStr:
+                return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+            else:
+                return params['null_message_val']
+
+    if curr_sim_len == 2:
+        if 'send_to-all' in actionStr:
+            return int(actionStr.split('_')[-1])    
+        elif 'agent-'+str(receiver_id) in actionStr:
+            return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+        else:
+            return params['null_message_val']
+
+    if curr_sim_len == 3:
+        #Do nothing because agents are just committing
+        pass
+
 def actionEffect(params, agent_list, actionStr, init_val, actor_prev_action_result, receiver_id):
     # return the effects of a particular action
     #print('action string is ', actionStr)
