@@ -46,7 +46,7 @@ class MultiAgentEnv(gym.Env):
 
         ##TODO: change if not a byzantine agent
         self.observation_space = spaces.Box(0, 3, (len(self.byzantine_agents[0].state),), dtype=np.uint8)
-
+        self.leader = self.byzantine_agents[0]
         # self.observation_space = []
 
         # self.action_space = []
@@ -69,10 +69,11 @@ class MultiAgentEnv(gym.Env):
         ## Set the leader
         if curr_sim_len == 1:
             self.byzantine_agents[0].isLeader = True
-        if curr_sim_len == 5:
-            self.byzantine_agents[0].isLeader = False
-            index = np.random.choice([0,1])
-            self.honest_agents[index].isLeader = True
+        # if curr_sim_len == 5:
+        #     self.byzantine_agents[0].isLeader = False
+        #     index = np.random.choice([0,1])
+        #     self.leader = honest_agents[index]
+        #     self.honest_agents[index].isLeader = True
 
         self.scripted_agents = self.world.scripted_agents
         # set action for each agent
@@ -157,86 +158,71 @@ class MultiAgentEnv(gym.Env):
             agent.committed_value = int(agent.actionString.split('_')[1])
     
     def _set_scripted_action(self, agent, curr_sim_len):
-        if curr_sim_len == 1:
+        if curr_sim_len%4 == 1:
+            # Status round #
             if agent.isLeader:
                 agent.actionString = 'pass'
             else:
+                if agent.committed_value != -1:
+                    agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.committed_value)
+                    agent.roundValue = agent.committed_value
+                else:
+                    agent.actionString = 'pass'
+
+        if curr_sim_len%4 == 2:
+            # Propose Round #
+            if agent.isLeader:
+                if agent.statusValue == params['null_message_val']:
+                    agent.proposeValue = np.random.choice([0,1])
+                    agent.actionString = 'send_to-all_'+str(agent.proposeValue)
+                else:
+                    agent.actionString - 'send_to-all_'+str(agent.statusValue)
+            else:
                 agent.actionString = 'pass'
 
-        if curr_sim_len == 2:
-            # if agent.isLeader:
-            # agent.proposeValue = np.random.choice([0,1])
-            agent.actionString = 'send_to-all_'+str(agent.proposeValue)
-            # else:
-            #     agent.actionString = 'pass'
+        if curr_sim_len%4 == 3:
+            # Vote Round #
+            agent.actionString = 'send_to-all_' + str(agent.proposeValue)
+            agent.roundValue = agent.proposeValue
 
-        if curr_sim_len == 3:
-            # if self.world.byzantineEquivocate:
-            #     agent.actionString = 'no_commit'
+        if curr_sim_len%4 == 0:
+            # Commit Round #
+            if self.world.byzantineEquivocate:
+                agent.actionString = 'no_commit'
                 # print('byzantine equivocate')
-            # else:
-                #Get majority value
-            zeroCount = 0
-            oneCount = 0
-                # print(agent.state)
-            for val in agent.state:
-                if int(val) is 0:
-                    zeroCount+=1
-                if int(val) is 1:
-                    oneCount+=1
-            # Update agent commit value
-            # print('zeroCount: ', zeroCount)
-            # print('oneCount: ', oneCount)
-            quorum = (self.params['num_agents']+1)/2
-            if zeroCount == quorum:
-                agent.actionString = 'commit_0'
-                agent.committed_value = 0
-                # print('commit_0')
-            elif oneCount == quorum:
-                agent.actionString = 'commit_1'
-                agent.committed_value = 1
-                # print('commit_1')
             else:
-                agent.actionString = 'no_commit'  
-            ### WHen we have two rollouts of protocol:
-            # agent.actionString = 'send_to-all_' + str(agent.proposeValue)
-
-        # if curr_sim_len == 4:
-        #     #TODO: have to change this to handle more agents later
-            # if self.world.byzantineEquivocate:
-            #     agent.actionString = 'no_commit'
-            #     # print('byzantine equivocate')
-            # else:
-            #     #Get majority value
-            #     zeroCount = 0
-            #     oneCount = 0
-            #     # print(agent.state)
-            #     for val in agent.state:
-            #         if int(val) is 0:
-            #             zeroCount+=1
-            #         if int(val) is 1:
-            #             oneCount+=1
-            #     # Update agent commit value
-            #     # print('zeroCount: ', zeroCount)
-            #     # print('oneCount: ', oneCount)
-            #     quorum = (self.params['num_agents']-1)/2
-            #     if zeroCount is quorum:
-            #         agent.actionString = 'commit_0'
-            #         agent.committed_value = 0
-            #         print('commit_0')
-            #     elif oneCount is quorum:
-            #         agent.actionString = 'commit_1'
-            #         agent.committed_value = 1
-            #         print('commit_1')
-            #     else:
-            #     agent.actionString = 'no_commit'  
+                #Get majority value
+                zeroCount = 0
+                oneCount = 0
+                # print(agent.state)
+                for val in agent.state:
+                    if int(val) == 0:
+                        zeroCount+=1
+                    if int(val) == 1:
+                        oneCount+=1
+                # Update agent commit value
+                # print('zeroCount: ', zeroCount)
+                # print('oneCount: ', oneCount)
+                quorum = (self.params['num_agents']+1)/2
+                if zeroCount == quorum:
+                    agent.actionString = 'commit_0'
+                    agent.committed_value = 0
+                    # print('commit_0')
+                elif oneCount == quorum:
+                    agent.actionString = 'commit_1'
+                    agent.committed_value = 1
+                    # print('commit_1')
+                else:
+                    agent.actionString = 'no_commit'  
 
         # if curr_sim_len == 5:
         #     if agent.isLeader:
         #         pass
         #     else:
-        #         if 'commit_' in agent.prevActionString:
-        #             agent.actionString = 'status_'+ str(agent.prevActionString.split('_')[-1])
+        #         if agent.committed_value != -1:
+        #             agent.actionString = 'send_to-leader_'+str(agent.committed_value)
+        #         else:
+        #             agent.actionString = 'pass'
 
         # if curr_sim_len == 6:
         #     if agent.isLeader:

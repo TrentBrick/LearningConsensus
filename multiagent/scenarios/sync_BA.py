@@ -19,7 +19,7 @@ class Scenario(BaseScenario):
 
     def reset_world(self, params, world):
         world.agents, world.honest_agents, world.byzantine_agents = self.setup_world(params)
-
+        # print(world.byzantine_agents[0].state)
         world.byzantineEquivocate = False
         world.majorityValue = -1
 
@@ -61,11 +61,13 @@ class Scenario(BaseScenario):
         sim_done = False
         reward_list = []
         for byz_agent in world.byzantine_agents:
-            if curr_sim_len == 1:
+            if curr_sim_len%4 == 1:
+                pass
+            if curr_sim_len%4 == 2:
                 # byz_agent.reward += params['first_round_reward']
                 if world.byzantineEquivocate:
                     byz_agent.reward += params['equivocation_penalty']
-            if curr_sim_len == 2:
+            if curr_sim_len%4 == 3:
                 # pass
                 if world.byzantineEquivocate:
                     byz_agent.reward += params['equivocation_penalty']
@@ -74,7 +76,7 @@ class Scenario(BaseScenario):
                 # else:
                 #     byz_agent.reward += params['PKI_reward']
                 # for agent in world.honest_agents:
-            if curr_sim_len == 3:
+            if curr_sim_len%4 == 0:
                 comm_values = []
                 for agent in world.honest_agents:
                     comm_values.append(agent.committed_value)
@@ -82,14 +84,13 @@ class Scenario(BaseScenario):
                 #If one agent has committed and the other hasn't, give a reward
                 if -1 in comm_values and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
+                elif 1 in comm_values and 0 in comm_values:
+                    byz_agent.reward += params['diff_commit_reward']
                 # elif len(set(comm_values)) is 1:
                 #     byz_agent.reward += params['honest_correct_commit']
                 elif (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
-                # else:
-                #     byz_agent.reward += params['honest_incorrect_commit']
-                # else:
-                #     byz_agent.reward += params['honest_incorrect_commit']
+
         
         for agent in world.byzantine_agents:
             reward_list.append(agent.reward)

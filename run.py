@@ -45,7 +45,7 @@ def initialize_parameters():
     # Training Settings
     parser.add_argument("--epochs", type=int, action='store', nargs='+', default = [100], help='number of epochs')
     parser.add_argument("--actions_per_epoch", type=int, action='store', nargs='+', default = [4000], help='number of protocol simulations per epoch')
-    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [3], help='limit on the number of rounds per protocol simulation')
+    parser.add_argument("--max_round_len", type=int, action='store', nargs='+', default = [32], help='limit on the number of rounds per protocol simulation')
     parser.add_argument("--print_every", type=int, action='store', nargs='+', default = [5], help='')
 
     # RL Settings
@@ -95,7 +95,8 @@ def initialize_parameters():
     parser.add_argument("--additional_round_reward", action ='store', type=float, default = [0.3], nargs='+')
     parser.add_argument("--no_equivocation_reward", action ='store', type=float, default = [.3], nargs='+')
     parser.add_argument("--equivocation_penalty", action ='store', type=float, default = [-.3], nargs='+')
-    parser.add_argument("--termination-reward", action='store', type=float, default=[25], nargs='+')
+    parser.add_argument("--termination_reward", action='store', type=float, default=[25], nargs='+')
+    parser.add_argument("--diff_commit_reward", action='store', type=float, default=[25], nargs='+')
 
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')

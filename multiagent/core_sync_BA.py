@@ -17,8 +17,12 @@ class Honest_Agent:
         self.committed_ptr =  False
         self.reward = 0
 
-        self.state = self.initAgentState(params, give_inits)
+        self.proposeValue = params['null_message_val']
+        self.statusValue = params['null_message_val']
         self.committed_value = -1
+        self.roundValue = params['null_message_val']
+
+        self.state = self.initAgentState(params, give_inits)
 
         self.actionIndex = None
         self.actionString = ""
@@ -27,8 +31,6 @@ class Honest_Agent:
         # can use this to create agents that don't react to the policy
         self.action_callback = True
         self.isLeader = False
-        self.proposeValue = params['null_message_val']
-        self.statusValue = params['null_message_val']
     
     def initAgentState(self, params, give_inits):
         initState = []
@@ -50,8 +52,6 @@ class Byzantine_Agent:
 
         self.proposeValue = params['null_message_val']
         self.statusValue = params['null_message_val']
-
-
         self.committed_value = False
 
         self.actionIndex = None
@@ -70,12 +70,15 @@ class Byzantine_Agent:
             state.append(0)
 
         #No send
-        # 2 actions where send something different
-        state = (state + [0]*5)
-        state.append(1)
+        ### We don't want the agent to send anything in the status round, so zero out everything but no_send ###
         state.append(0)
-        state.append(1)
-        state.append(0)
+        state = (state + [1]*8)
+        # # 2 actions where send something different
+        # state = (state + [0]*5)
+        # state.append(1)
+        # state.append(0)
+        # state.append(1)
+        # state.append(0)
         # state = (state + [0]*6)
         self.state = torch.tensor(state).int()
         # print(self.state)
@@ -161,9 +164,15 @@ class World(object):
         return [agent for agent in self.agents if agent.action_callback is not None]
 
     def step(self, curr_sim_len):
-        if (curr_sim_len < 3):
+        if (curr_sim_len%4 != 0):
             for agent in self.agents:
                 self.update_agent_state(agent, self.agents, curr_sim_len)
+        # if curr_sim_len%4 == 0:
+        #     new_state = agent.state
+        #     new_state.append(1)
+        #     new_state.append(4)
+        #     new_state = (new_state + [0]*9)
+        #     agent.state = (new_state)
         
         ## Based on the actions of the other two honest agents, limit the action space
         # if curr_sim_len is 1:
@@ -180,30 +189,81 @@ class World(object):
                 continue
             new_state.append(sync_BA_effect(self.params, self.agents, actor.actionString, agent.state[actor_ind], agent.agentId, curr_sim_len))
             actor_ind +=1
-        
+
         #Update initial value - can't override this value later when the byzantine sends it 
-        if curr_sim_len == 1 and not agent.isLeader:
+        if curr_sim_len%4 == 2 and not agent.isLeader:
             for val in new_state:
                 if val != self.params['null_message_val']:
                     new_state[0] = val
                     agent.proposeValue = val
         
         if agent.isByzantine:
-            new_state.append(curr_sim_len)
-            
+            oneCount = 0
+            zeroCount = 0
+            for actor in agent_list:
+                if not agent.isByzantine:
+                    if 'no_send' not in actor.actionString and 'commit' not in actor.actionString:
+                        if agent.roundValue == 1:
+                            oneCount += 1
+                        if agent.roundValue == 0:
+                            zeroCount +=1 
+            quorum = (self.params['num_agents']+1)/2
+            quorumVal = False
+            if oneCount == quorum:
+                quorumVal = oneCount
+            if zeroCount == quorum:
+                quorumVal = zeroCount
+
+            #Append sim len
+            if curr_sim_len == 4 or curr_sim_len == 8:
+                new_state.append(4)
+            else:
+                new_state.append(curr_sim_len%4)
+            #Append if leader or not
             if agent.isLeader:
                 new_state.append(1)
             else:
                 new_state.append(0)
 
-            new_state = (new_state + [0]*5)
-            new_state.append(1)
-            new_state.append(0)
-            new_state.append(1)
-            new_state.append(0)
-            # print('sim is: ', curr_sim_len)
-            # print(new_state)
+            if curr_sim_len%4 == 1:
+                # If we get f+1 status votes for a single value, then we must propose that value in next round
+                if quorumVal is not False:
+                    #Cancel out first 5 actions - no_send and sending individual agents
+                    new_state = (new_state + [1]*5)
+                    for action in agent.actionSpace[5:]:
+                        if 'value-0' in action and 'value-1' in action:
+                            new_state.append(1)
+                        elif 'value-'+str(quorumVal) in action:
+                            new_state.append(0)
+                        else:
+                            new_state.append(1)
+                else:
+                    #Balance for equivocation
+                    new_state = (new_state + [0]*5)
+                    new_state.append(1)
+                    new_state.append(0)
+                    new_state.append(1)
+                    new_state.append(0)
+            if curr_sim_len%4 == 2:
+                #Balance for equivocation
+                new_state = (new_state + [0]*5)
+                new_state.append(1)
+                new_state.append(0)
+                new_state.append(1)
+                new_state.append(0)
+
+            if curr_sim_len%4 == 3:
+                #Balance for equivocation
+                new_state = (new_state + [0]*5)
+                new_state.append(1)
+                new_state.append(0)
+                new_state.append(1)
+                new_state.append(0)
             
+
+
+
+        # print(new_state)
         agent.state = torch.tensor(new_state).int()
 
 

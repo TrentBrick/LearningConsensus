@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/tmp/experiments/exp55-syncBA-equivocate")
+    logger = EpochLogger(output_dir="/tmp/experiments/exp57-syncBA-8Rollouts")
     logger.save_config(locals())
 
     # Random seed
@@ -197,7 +197,6 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     # Prepare for interaction with environment
     start_time = time.time()
     o_list, honest_ep_ret, byzantine_ep_ret, ep_len = env.reset(), 0, 0, 0
-    
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs): 
         round_len = 1
