@@ -2,7 +2,7 @@
 
 This is a markdown file of for the Learning Consensus weekly syncs
 
-## Tuesday August 25th, 2020
+## Tuesday August 25th, 2020 - Weekly Sync
 
 Yash has updated simulation to continue until the honest agents commit - protocol running with 2 views. Byzantine agent delays on first view and on the second view with a new (honest) leader, the honest agents commit
 

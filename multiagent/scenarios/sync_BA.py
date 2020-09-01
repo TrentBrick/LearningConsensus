@@ -60,6 +60,7 @@ class Scenario(BaseScenario):
     def reward(self, params, curr_sim_len, world):
         sim_done = False
         reward_list = []
+        safety_violation = False
         for byz_agent in world.byzantine_agents:
             if curr_sim_len%4 == 1:
                 pass
@@ -80,32 +81,30 @@ class Scenario(BaseScenario):
                 comm_values = []
                 for agent in world.honest_agents:
                     comm_values.append(agent.committed_value)
-                
                 #If one agent has committed and the other hasn't, give a reward
-                if -1 in comm_values and (1 in comm_values or 0 in comm_values):
+                if (2 in comm_values) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
                 elif 1 in comm_values and 0 in comm_values:
-                    byz_agent.reward += params['diff_commit_reward']
-                # elif len(set(comm_values)) is 1:
-                #     byz_agent.reward += params['honest_correct_commit']
-                elif (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values):
+                    byz_agent.reward += params['safety_reward']
+                    safety_violation = True
+                elif (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
-
+                    sim_done = True
         
         for agent in world.byzantine_agents:
             reward_list.append(agent.reward)
 
-        if curr_sim_len == params['max_round_len']:
-            sim_done = True
+        ## Code for checking if simulation is done -> done when we want to force end after x rounds ##
+        # if curr_sim_len == params['max_round_len']:
+        #     sim_done = True
 
-        return sim_done, reward_list
+        return sim_done, reward_list, safety_violation
 
     def observation(self, agent, world):
         return agent.state
 
     def is_done(self, agent):
-        #Not sure if this is a float or not
-        return not(type(agent.committed_value) is not int)
+        return agent.committed_value != 2
 
     def getMajority(self, agents):
         starting_values = []

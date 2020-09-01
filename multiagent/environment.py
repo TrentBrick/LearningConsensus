@@ -62,24 +62,21 @@ class MultiAgentEnv(gym.Env):
         reward_n = []
         done_n = []
         info_n = {'n': []}
-        self.agents = self.world.policy_agents
-        self.honest_agents = self.world.honest_agents
-        self.byzantine_agents = self.world.byzantine_agents
 
-        ## Set the leader
+        ## Set the leader & view change in round 5
         if curr_sim_len == 1:
             self.byzantine_agents[0].isLeader = True
-        # if curr_sim_len == 5:
-        #     self.byzantine_agents[0].isLeader = False
-        #     index = np.random.choice([0,1])
-        #     self.leader = honest_agents[index]
-        #     self.honest_agents[index].isLeader = True
+        if curr_sim_len == 5:
+            self.byzantine_agents[0].isLeader = False
+            index = np.random.choice([0,1])
+            self.leader = self.honest_agents[index]
+            self.honest_agents[index].isLeader = True
 
         self.scripted_agents = self.world.scripted_agents
         # set action for each agent
         for ind, agent in enumerate(self.agents):
             self._set_action(action_n[ind], agent)
-            if type(agent.committed_value) is int and len(agent.last_action_etc.keys())==0: # agent has committed and it has only just committed!! ie it doesnt have any dictoinary values yet. 
+            if agent.committed_value != self.params['null_message_val'] and len(agent.last_action_etc.keys())==0: # agent has committed and it has only just committed!! ie it doesnt have any dictoinary values yet. 
                 agent.last_action_etc['obs'] = agent.state
                 agent.last_action_etc['act'] = action_n[ind]
                 agent.last_action_etc['val'] = v_list[ind]
@@ -87,6 +84,13 @@ class MultiAgentEnv(gym.Env):
         
         for agent in self.scripted_agents:
            self._set_scripted_action(agent, curr_sim_len)
+        # print("curr round: ", curr_sim_len)
+        # print("Leader: I am {} and action: {} and state: {}".format(self.leader.agentId, self.leader.actionString, self.leader.state))
+        curr_agent = self.leader
+        for honest_agent_check in self.honest_agents:
+            if honest_agent_check.isLeader == False:
+                curr_agent = honest_agent_check
+        # print("Not leader: I am {} and action: {} and state: {}".format(curr_agent.agentId, curr_agent.actionString, curr_agent.state))
 
         if curr_sim_len == 3:
             if self.scripted_agents[0].actionString == self.scripted_agents[1].actionString and self.scripted_agents[0].actionString != 'no_commit':
@@ -94,12 +98,13 @@ class MultiAgentEnv(gym.Env):
             # print("Honest won with: ", self.scripted_agents[0].actionString)
         #record if the leader has equivocated
         if '0' in self.byzantine_agents[0].actionString and '1' in self.byzantine_agents[0].actionString:
-            self.world.byzantineEquivocate = True
+            # self.world.byzantineEquivocate = True
+            pass
 
         # advance world state
         self.world.step(curr_sim_len)
         # record reward for each agent
-        sim_done, reward_n = self._get_reward(curr_sim_len)
+        sim_done, reward_n, safety_violation = self._get_reward(curr_sim_len)
         # record observation for each agent
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
@@ -113,7 +118,14 @@ class MultiAgentEnv(gym.Env):
         # if self.shared_reward:
         #     reward_n = [reward] * self.n
 
-        return obs_n, reward_n, done_n, info_n, sim_done
+        #Reset view specific state
+        if curr_sim_len%4 == 0:
+            for agent in self.allAgents:
+                agent.status_values = []
+                agent.proposeValue = self.params['null_message_val']
+                agent.statusValue = self.params['null_message_val']
+
+        return obs_n, reward_n, done_n, info_n, sim_done, safety_violation
 
     def reset(self):
         # reset world
@@ -121,6 +133,10 @@ class MultiAgentEnv(gym.Env):
         # record observations for each agent
         obs_n = []
         self.agents = self.world.policy_agents
+        self.honest_agents = self.world.honest_agents
+        self.byzantine_agents = self.world.byzantine_agents
+        self.allAgents = self.world.agents
+
         self.majorityValue = self.world.majorityValue
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
@@ -163,27 +179,33 @@ class MultiAgentEnv(gym.Env):
             if agent.isLeader:
                 agent.actionString = 'pass'
             else:
-                if agent.committed_value != -1:
+                if agent.committed_value != self.params['null_message_val']:
                     agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.committed_value)
                     agent.roundValue = agent.committed_value
                 else:
                     agent.actionString = 'pass'
+            ## Reset propose values values and saved state
 
         if curr_sim_len%4 == 2:
             # Propose Round #
             if agent.isLeader:
-                if agent.statusValue == params['null_message_val']:
+                if agent.statusValue == self.params['null_message_val']:
                     agent.proposeValue = np.random.choice([0,1])
                     agent.actionString = 'send_to-all_'+str(agent.proposeValue)
                 else:
-                    agent.actionString - 'send_to-all_'+str(agent.statusValue)
+                    agent.proposeValue = agent.statusValue
+                    agent.actionString = 'send_to-all_'+str(agent.proposeValue)
             else:
                 agent.actionString = 'pass'
 
         if curr_sim_len%4 == 3:
             # Vote Round #
-            agent.actionString = 'send_to-all_' + str(agent.proposeValue)
-            agent.roundValue = agent.proposeValue
+            if agent.proposeValue != self.params['null_message_val']:
+                agent.actionString = 'send_to-all_' + str(agent.proposeValue)
+                agent.roundValue = agent.proposeValue
+            # Agent will not vote for anything becuase it hasn't been proposed a value
+            else:
+                agent.actionString = 'pass'
 
         if curr_sim_len%4 == 0:
             # Commit Round #
@@ -194,75 +216,22 @@ class MultiAgentEnv(gym.Env):
                 #Get majority value
                 zeroCount = 0
                 oneCount = 0
-                # print(agent.state)
                 for val in agent.state:
                     if int(val) == 0:
                         zeroCount+=1
                     if int(val) == 1:
                         oneCount+=1
                 # Update agent commit value
-                # print('zeroCount: ', zeroCount)
-                # print('oneCount: ', oneCount)
                 quorum = (self.params['num_agents']+1)/2
-                if zeroCount == quorum:
+                if zeroCount >= quorum:
                     agent.actionString = 'commit_0'
                     agent.committed_value = 0
-                    # print('commit_0')
-                elif oneCount == quorum:
+                elif oneCount >= quorum:
                     agent.actionString = 'commit_1'
                     agent.committed_value = 1
-                    # print('commit_1')
                 else:
                     agent.actionString = 'no_commit'  
 
-        # if curr_sim_len == 5:
-        #     if agent.isLeader:
-        #         pass
-        #     else:
-        #         if agent.committed_value != -1:
-        #             agent.actionString = 'send_to-leader_'+str(agent.committed_value)
-        #         else:
-        #             agent.actionString = 'pass'
-
-        # if curr_sim_len == 6:
-        #     if agent.isLeader:
-        #         if agent.statusValue == params['null_message_val']:
-        #             agent.actionString = 'send_to-all_'+str(agent.proposeValue)
-        #         else:
-        #             agent.actionString - 'send_to-all_'+str(agent.statusValue)
-        #     else:
-        #         pass
-
-        # if curr_sim_len == 7:
-        #     agent.actionString = 'send_to-all_' + str(agent.proposeValue)
-        
-        # if curr_sim_len == 8:
-        #     if self.world.byzantineEquivocate:
-        #         agent.actionString = 'no_commit'
-        #     else:
-        #         #Get majority value
-        #         zeroCount = 0
-        #         oneCount = 0
-        #         # print(agent.state)
-        #         for val in agent.state:
-        #             if int(val) is 0:
-        #                 zeroCount+=1
-        #             if int(val) is 1:
-        #                 oneCount+=1
-        #         # Update agent commit value
-        #         # print('zeroCount: ', zeroCount)
-        #         # print('oneCount: ', oneCount)
-        #         quorum = (self.params['num_agents']-1)/2
-        #         if zeroCount is quorum:
-        #             agent.actionString = 'commit_0'
-        #             agent.committed_value = 0
-        #             print('commit_0')
-        #         elif oneCount is quorum:
-        #             agent.actionString = 'commit_1'
-        #             agent.committed_value = 1
-        #             print('commit_1')
-        #         else:
-        #         agent.actionString = 'no_commit'  
     # reset rendering assets
     # def _reset_render(self):
     #     self.render_geoms = None

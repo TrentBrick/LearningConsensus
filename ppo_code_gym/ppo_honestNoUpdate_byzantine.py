@@ -219,7 +219,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             v_list = []
             logp_list = []
             for i, agent in enumerate(env.agents):
-                if type(agent.committed_value) is int:
+                if agent.committed_value != params['null_message_val']:
                     a, logp, v = agent.actionIndex, None, None
                 else:
                     if agent.isByzantine and epoch > 25:
@@ -240,10 +240,10 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if 'commit' in agentActionString:
                     agent.committed_value = int(agentActionString.split('_')[1])
                 
-                if type(agent.committed_value) is bool:
+                if agent.committed_value == params['null_message_val']:
                     buf.store(0, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
 
-                elif type(agent.committed_value) is int and len(agent.last_action_etc.keys()) == 0:
+                elif agent.committed_value != params['null_message_val'] and len(agent.last_action_etc.keys()) == 0:
                     pass 
 
             next_o, r_list, d_list, info_n_list, sim_done = env.step(actions_list, v_list, logp_list, round_len)

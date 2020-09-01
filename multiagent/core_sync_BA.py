@@ -19,8 +19,9 @@ class Honest_Agent:
 
         self.proposeValue = params['null_message_val']
         self.statusValue = params['null_message_val']
-        self.committed_value = -1
+        self.committed_value = params['null_message_val']
         self.roundValue = params['null_message_val']
+        self.status_values = []
 
         self.state = self.initAgentState(params, give_inits)
 
@@ -30,7 +31,6 @@ class Honest_Agent:
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = True
-        self.isLeader = False
     
     def initAgentState(self, params, give_inits):
         initState = []
@@ -52,7 +52,8 @@ class Byzantine_Agent:
 
         self.proposeValue = params['null_message_val']
         self.statusValue = params['null_message_val']
-        self.committed_value = False
+        self.status_values = []
+        self.committed_value = params['null_message_val']
 
         self.actionIndex = None
         self.actionString = ""
@@ -70,9 +71,10 @@ class Byzantine_Agent:
             state.append(0)
 
         #No send
-        ### We don't want the agent to send anything in the status round, so zero out everything but no_send ###
+        ### We don't want the agent to send anything in the FIRST status round, so zero out everything but no_send ###
         state.append(0)
         state = (state + [1]*8)
+
         # # 2 actions where send something different
         # state = (state + [0]*5)
         # state.append(1)
@@ -134,14 +136,6 @@ class Byzantine_Agent:
         # Only give option to send to two agents 
         # action_space = action_space[1:5]
 
-        # rounds = ['propose_', 'vote_', 'status_']
-        # prefix_action_space = []
-        # for prefix in rounds:
-        #     for action in action_space:
-        #         prefix_action_space.append(prefix+action)
-        # print(action_space)
-        # action_space = action_space[5:]
-
         return action_space
         
     
@@ -150,8 +144,6 @@ class World(object):
     
     def __init__(self, params):
         self.params = params
-        self.agents = []
-        ##TODO: might need to add some dimensions for action spaces here
     
     #return all agents controlled by a policy 
     @property
@@ -167,28 +159,71 @@ class World(object):
         if (curr_sim_len%4 != 0):
             for agent in self.agents:
                 self.update_agent_state(agent, self.agents, curr_sim_len)
-        # if curr_sim_len%4 == 0:
-        #     new_state = agent.state
-        #     new_state.append(1)
-        #     new_state.append(4)
-        #     new_state = (new_state + [0]*9)
-        #     agent.state = (new_state)
-        
-        ## Based on the actions of the other two honest agents, limit the action space
-        # if curr_sim_len is 1:
-            ## Can't send different value from what it sent previously 
-
-                
+        if curr_sim_len%4 == 0:
+            for agent in self.honest_agents:
+                new_state = [2] * self.params['num_agents']
+                #Update vote counts for honest agents
+                agent.state = torch.tensor(new_state).int()            
 
     def update_agent_state(self, agent, agent_list, curr_sim_len):
         #Update the given agents state given what all the other agents actions are 
         actor_ind = 1
         new_state = [agent.proposeValue] # keep track of the agent's initial value
-        for actor in agent_list:
-            if agent.agentId == actor.agentId:
-                continue
-            new_state.append(sync_BA_effect(self.params, self.agents, actor.actionString, agent.state[actor_ind], agent.agentId, curr_sim_len))
-            actor_ind +=1
+
+        old_state = agent.state.numpy().astype(int).tolist() # keep track of old state and turn into integer list
+        old_state = old_state[0:self.params['num_agents']] # only want the first n elements - byznatine agent updates values later based on state
+
+        if curr_sim_len%4 == 1:
+            #Only need to update the leader's state
+            if agent.isLeader:
+                new_state = old_state
+                if agent.committed_value != self.params['null_message_val']:
+                    agent.status_values.append(agent.committed_value)
+                for actor in agent_list:
+                    if agent.agentId == actor.agentId:
+                        continue
+                    status = sync_BA_effect(self.params, self.agents, actor.actionString, agent.state[actor_ind], agent.agentId, curr_sim_len)
+                    if status != 2:
+                        agent.status_values.append(status)
+                    actor_ind +=1
+                #Update status value of agent
+                if len(agent.status_values) == 0 or len(set(agent.status_values)) > 1:
+                    agent.statusValue = self.params['null_message_val']
+                else:
+                    agent.statusValue = agent.status_values[0]
+
+            # Non leader's state remains the same
+            else:
+                new_state = old_state
+
+        if curr_sim_len%4 == 2:
+            # Propose value for leader already updated in the set_scriped agent action in environment.py 
+
+            # Leader's state remains the same because the leader is proposing - only update proposeValue
+            if agent.isLeader: 
+                new_state = old_state
+                new_state[0] = agent.proposeValue
+            # Non leaders must update their propose value
+            else:
+                for actor in agent_list:
+                    # If the agent is itself, don't update
+                    if agent.agentId == actor.agentId:
+                        continue
+                    # Append old state value
+                    new_state.append(old_state[actor_ind])
+                    # Update propose value to value sent from leader
+                    if actor.isLeader:
+                        agent.proposeValue = sync_BA_effect(self.params, self.agents, actor.actionString, agent.state[actor_ind], agent.agentId, curr_sim_len)
+                        new_state[0] = agent.proposeValue #Update value in state to count votes in commit round
+                    actor_ind +=1
+        
+        if curr_sim_len%4 == 3:
+            #In vote round, everyone's state is updated
+            for actor in agent_list:
+                if agent.agentId == actor.agentId:
+                    continue
+                new_state.append(sync_BA_effect(self.params, self.agents, actor.actionString, agent.state[actor_ind], agent.agentId, curr_sim_len))
+                actor_ind +=1
 
         #Update initial value - can't override this value later when the byzantine sends it 
         if curr_sim_len%4 == 2 and not agent.isLeader:
@@ -197,7 +232,15 @@ class World(object):
                     new_state[0] = val
                     agent.proposeValue = val
         
-        if agent.isByzantine:
+        if not agent.isByzantine and agent.isLeader:
+            if curr_sim_len%4 == 1:
+                if agent.state[1] == agent.state[2] and agent.state[1] != -1:
+                    agent.proposeValue = agent.state[1]
+                else:
+                    agent.proposeValue = np.random.choice([0,1])
+            
+                    
+        if agent.isByzantine and agent.isLeader:
             oneCount = 0
             zeroCount = 0
             for actor in agent_list:
@@ -225,6 +268,7 @@ class World(object):
             else:
                 new_state.append(0)
 
+            ## These next methods are zero-ing out action probabilities for the next round ## 
             if curr_sim_len%4 == 1:
                 # If we get f+1 status votes for a single value, then we must propose that value in next round
                 if quorumVal is not False:
@@ -244,6 +288,7 @@ class World(object):
                     new_state.append(0)
                     new_state.append(1)
                     new_state.append(0)
+                    
             if curr_sim_len%4 == 2:
                 #Balance for equivocation
                 new_state = (new_state + [0]*5)
@@ -260,6 +305,50 @@ class World(object):
                 new_state.append(1)
                 new_state.append(0)
             
+        if agent.isByzantine and not agent.isLeader:
+            # Find index of leader
+            leaderId = -1
+            for actor in agent_list:
+                if actor.isLeader:
+                    leaderId = actor.agentId
+                    break
+            
+            #Append sim len
+            if curr_sim_len%4 == 0:
+                new_state.append(4)
+            else:
+                new_state.append(curr_sim_len%4)
+            #Append if leader or not
+            if agent.isLeader:
+                new_state.append(1)
+            else:
+                new_state.append(0)
+
+            ## The next methods zero out actions that the agent should not do
+            if curr_sim_len%4 == 1:
+                # Shouldn't be sending anything except no_send in the propose round
+                new_state.append(0)
+                new_state = (new_state + [1]*8)
+            if curr_sim_len%4 == 2:
+                # Agent can only vote for what was proposed to it
+                proposeStringOpposite = 'value-' + str(1 - agent.proposeValue)
+                new_state.append(0)
+                new_state = (new_state + [1]*4)
+                for action in agent.actionSpace[5:]:
+                    if proposeStringOpposite in action:
+                        new_state.append(1)
+                    else:
+                        new_state.append(0)
+            if curr_sim_len%4 == 3:
+                #Balance for equivocation
+                new_state = (new_state + [0]*5)
+                new_state.append(1)
+                new_state.append(0)
+                new_state.append(1)
+                new_state.append(0)
+            
+
+
 
 
 

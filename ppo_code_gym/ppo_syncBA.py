@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/tmp/experiments/exp57-syncBA-8Rollouts")
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp59-syncBA-4Round-FullRollout")
     logger.save_config(locals())
 
     # Random seed
@@ -202,11 +202,12 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         round_len = 1
         curr_ep_trajectory_log = []
         prev_ep_trajectory_log = []
-        single_run_trajectory_log = setup_trajectory_log(env.agents)
+        single_run_trajectory_log = setup_trajectory_log(env.allAgents)
         sims=0
         honest_wins = 0
         byzantine_wins = 0
         rounds = 0
+        safetyViolations = 0
         same_action = 0
         byzantine_action_dic = dict()
         for t in range(local_steps_per_epoch):
@@ -214,7 +215,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             v_list = []
             logp_list = []
             for i, agent in enumerate(env.agents):
-                if type(agent.committed_value) is int:
+                if agent.committed_value != params['null_message_val']:
                     a, logp, v = agent.actionIndex, None, None
                 else:
                     a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
@@ -231,24 +232,30 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if 'commit' in agentActionString:
                     agent.committed_value = int(agentActionString.split('_')[1])
                 
-                if type(agent.committed_value) is bool:
+                if agent.committed_value == params['null_message_val']:
                     buf.store(0, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
 
-                elif type(agent.committed_value) is int and len(agent.last_action_etc.keys()) == 0:
+                elif agent.committed_value != params['null_message_val'] and len(agent.last_action_etc.keys()) == 0:
                     pass 
             
-            next_o, r_list, d_list, info_n_list, sim_done = env.step(actions_list, v_list, logp_list, round_len)
+            next_o, r_list, d_list, info_n_list, sim_done, safety_violation = env.step(actions_list, v_list, logp_list, round_len)
             if round_len == 2:
                 if env.byzantine_agents[0].prevActionString == env.byzantine_agents[0].actionString:
                     same_action+=1
 
             ep_len += 1
 
+            
+
             #Log in trajectory
-            for agent in env.agents:                    
-                single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actionString))
+            for agent in env.allAgents:
+                single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actionString, agent.status_values, agent.statusValue, agent.proposeValue))
            
-            # Store new reward values
+           ## Print out safety violation
+            if safety_violation:
+                safetyViolations+=1
+                
+
             for ind, agent in enumerate(env.agents):
                 if agent.actionString in byzantine_action_dic:
                     byzantine_action_dic[agent.actionString]+=1
@@ -279,10 +286,10 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
                 for agent in env.honest_agents:
                     comm_values.append(agent.committed_value)
-                # print(comm_values)
-                if (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values):
+
+                if sim_done and round_len <= 4:
                     honest_wins+=1
-                else:
+                if sim_done and round_len > 4:
                     byzantine_wins+=1
                 # if len(set(comm_values)) is 1:
                 #     honest_wins+=1
@@ -317,7 +324,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 round_len = 0
                 prev_ep_trajectory_log = curr_ep_trajectory_log[:]
                 curr_ep_trajectory_log.append(single_run_trajectory_log)
-                single_run_trajectory_log = setup_trajectory_log(env.agents)
+                single_run_trajectory_log = setup_trajectory_log(env.allAgents)
 
             round_len += 1
 
@@ -343,12 +350,12 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         update()
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
-        # logger.log_tabular('Sims', sims)
-        # logger.log_tabular('CorrectCommits', single_correct)
+        logger.log_tabular('Sims', sims)
         logger.log_tabular('Same Action', same_action)
         logger.log_tabular('ByzantineWinPercentage', byzantine_wins/sims)
         logger.log_tabular('HonestWinPercentage', honest_wins/sims)
         logger.log_tabular('AverageRounds', rounds/sims)
+        logger.log_tabular('SafetyViolations', safetyViolations)
         logger.log_tabular('EpRet', with_min_and_max=True)
         logger.log_tabular('EpLen', average_only=True)
         logger.log_tabular('VVals', with_min_and_max=True)
