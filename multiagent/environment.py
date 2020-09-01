@@ -47,6 +47,7 @@ class MultiAgentEnv(gym.Env):
         ##TODO: change if not a byzantine agent
         self.observation_space = spaces.Box(0, 3, (len(self.byzantine_agents[0].state),), dtype=np.uint8)
         self.leader = self.byzantine_agents[0]
+        print("I am: ", self.leader)
         # self.observation_space = []
 
         # self.action_space = []
@@ -84,22 +85,10 @@ class MultiAgentEnv(gym.Env):
         
         for agent in self.scripted_agents:
            self._set_scripted_action(agent, curr_sim_len)
-        # print("curr round: ", curr_sim_len)
-        # print("Leader: I am {} and action: {} and state: {}".format(self.leader.agentId, self.leader.actionString, self.leader.state))
-        curr_agent = self.leader
-        for honest_agent_check in self.honest_agents:
-            if honest_agent_check.isLeader == False:
-                curr_agent = honest_agent_check
-        # print("Not leader: I am {} and action: {} and state: {}".format(curr_agent.agentId, curr_agent.actionString, curr_agent.state))
-
-        if curr_sim_len == 3:
-            if self.scripted_agents[0].actionString == self.scripted_agents[1].actionString and self.scripted_agents[0].actionString != 'no_commit':
-                pass
-            # print("Honest won with: ", self.scripted_agents[0].actionString)
+            
         #record if the leader has equivocated
-        if '0' in self.byzantine_agents[0].actionString and '1' in self.byzantine_agents[0].actionString:
-            # self.world.byzantineEquivocate = True
-            pass
+        if curr_sim_len%4 == 2 and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
+            self.world.byzantineEquivocate = True
 
         # advance world state
         self.world.step(curr_sim_len)
@@ -138,6 +127,13 @@ class MultiAgentEnv(gym.Env):
         self.allAgents = self.world.agents
 
         self.majorityValue = self.world.majorityValue
+
+        #Reset leader
+        for agent in self.allAgents:
+            if agent.isLeader:
+                self.leader = agent
+                break
+
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
         return obs_n    
@@ -211,7 +207,9 @@ class MultiAgentEnv(gym.Env):
             # Commit Round #
             if self.world.byzantineEquivocate:
                 agent.actionString = 'no_commit'
-                # print('byzantine equivocate')
+
+                ##Reset byzantine equivocate for next rollout
+                self.world.byzantineEquivocate = False
             else:
                 #Get majority value
                 zeroCount = 0

@@ -65,13 +65,14 @@ class Scenario(BaseScenario):
             if curr_sim_len%4 == 1:
                 pass
             if curr_sim_len%4 == 2:
+                pass
                 # byz_agent.reward += params['first_round_reward']
-                if world.byzantineEquivocate:
-                    byz_agent.reward += params['equivocation_penalty']
+                # if world.byzantineEquivocate:
+                #     byz_agent.reward += params['equivocation_penalty']
             if curr_sim_len%4 == 3:
-                # pass
-                if world.byzantineEquivocate:
-                    byz_agent.reward += params['equivocation_penalty']
+                pass
+                # if world.byzantineEquivocate:
+                #     byz_agent.reward += params['equivocation_penalty']
                 # if byz_agent.prevActionString != byz_agent.actionString:
                 #     byz_agent.reward += params['PKI_penalty']
                 # else:
