@@ -41,8 +41,9 @@ class Honest_Agent:
 
 class Byzantine_Agent:
 
-    def __init__(self, params, agentId, give_inits, byzantine_inds):
+    def __init__(self, params, agentId, give_inits, byzantine_inds, is_leader):
         self.isByzantine = True
+        self.isLeader = is_leader
         self.agentId = agentId
         self.actionSpace = self.getByzantineActionSpace(params, byzantine_inds)
         self.actionDims = len(self.actionSpace)
@@ -62,7 +63,6 @@ class Byzantine_Agent:
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = None
-        self.isLeader = True
 
         state = self.initAgentState(params, give_inits)
         if self.isLeader:
@@ -70,21 +70,11 @@ class Byzantine_Agent:
         else:
             state.append(0)
 
-        #No send
         ### We don't want the agent to send anything in the FIRST status round, so zero out everything but no_send ###
         state.append(0)
-        state = (state + [1]*8)
+        state = (state + [1]*(len(self.actionSpace)-1))
 
-        # # 2 actions where send something different
-        # state = (state + [0]*5)
-        # state.append(1)
-        # state.append(0)
-        # state.append(1)
-        # state.append(0)
-        # state = (state + [0]*6)
-        self.state = torch.tensor(state).int()
-        # print(self.state)
-    
+        self.state = torch.tensor(state).int()    
 
 
 
@@ -135,7 +125,6 @@ class Byzantine_Agent:
         # print(action_space)
         # Only give option to send to two agents 
         # action_space = action_space[1:5]
-
         return action_space
         
     
@@ -226,11 +215,11 @@ class World(object):
                 actor_ind +=1
 
         #Update initial value - can't override this value later when the byzantine sends it 
-        if curr_sim_len%4 == 2 and not agent.isLeader:
-            for val in new_state:
-                if val != self.params['null_message_val']:
-                    new_state[0] = val
-                    agent.proposeValue = val
+        # if curr_sim_len%4 == 2 and not agent.isLeader:
+        #     for val in new_state:
+        #         if val != self.params['null_message_val']:
+        #             new_state[0] = val
+        #             agent.proposeValue = val
         
         if not agent.isByzantine and agent.isLeader:
             if curr_sim_len%4 == 1:
@@ -270,40 +259,43 @@ class World(object):
 
             ## These next methods are zero-ing out action probabilities for the next round ## 
             if curr_sim_len%4 == 1:
+                new_state = (new_state + ([0]*len(agent.actionSpace)))
                 # If we get f+1 status votes for a single value, then we must propose that value in next round
-                if quorumVal is not False:
-                    #Cancel out first 5 actions - no_send and sending individual agents
-                    new_state = (new_state + [1]*5)
-                    for action in agent.actionSpace[5:]:
-                        if 'value-0' in action and 'value-1' in action:
-                            new_state.append(1)
-                        elif 'value-'+str(quorumVal) in action:
-                            new_state.append(0)
-                        else:
-                            new_state.append(1)
-                else:
-                    #Balance for equivocation
-                    new_state = (new_state + [0]*5)
-                    new_state.append(1)
-                    new_state.append(0)
-                    new_state.append(1)
-                    new_state.append(0)
+                # if quorumVal is not False:
+                #     #Cancel out first 5 actions - no_send and sending individual agents
+                #     new_state = (new_state + [1]*5)
+                #     for action in agent.actionSpace[5:]:
+                #         if 'value-0' in action and 'value-1' in action:
+                #             new_state.append(1)
+                #         elif 'value-'+str(quorumVal) in action:
+                #             new_state.append(0)
+                #         else:
+                #             new_state.append(1)
+                # else:
+                #     #Balance for equivocation
+                #     new_state = (new_state + [0]*5)
+                #     new_state.append(1)
+                #     new_state.append(0)
+                #     new_state.append(1)
+                #     new_state.append(0)
                     
             if curr_sim_len%4 == 2:
+                new_state = (new_state + ([0]*len(agent.actionSpace)))
                 #Balance for equivocation
-                new_state = (new_state + [0]*5)
-                new_state.append(1)
-                new_state.append(0)
-                new_state.append(1)
-                new_state.append(0)
+                # new_state = (new_state + [0]*5)
+                # new_state.append(1)
+                # new_state.append(0)
+                # new_state.append(1)
+                # new_state.append(0)
 
             if curr_sim_len%4 == 3:
+                new_state = (new_state + ([0]*len(agent.actionSpace)))
                 #Balance for equivocation
-                new_state = (new_state + [0]*5)
-                new_state.append(1)
-                new_state.append(0)
-                new_state.append(1)
-                new_state.append(0)
+                # new_state = (new_state + [0]*5)
+                # new_state.append(1)
+                # new_state.append(0)
+                # new_state.append(1)
+                # new_state.append(0)
             
         if agent.isByzantine and not agent.isLeader:
             # Find index of leader
@@ -326,26 +318,30 @@ class World(object):
 
             ## The next methods zero out actions that the agent should not do
             if curr_sim_len%4 == 1:
+                new_state = (new_state + ([0]*len(agent.actionSpace)))
                 # Shouldn't be sending anything except no_send in the propose round
-                new_state.append(0)
-                new_state = (new_state + [1]*8)
+                # new_state.append(0)
+                # new_state = (new_state + [1]*8)
             if curr_sim_len%4 == 2:
+                new_state = (new_state + ([0]*len(agent.actionSpace)))
+
                 # Agent can only vote for what was proposed to it
-                proposeStringOpposite = 'value-' + str(1 - agent.proposeValue)
-                new_state.append(0)
-                new_state = (new_state + [1]*4)
-                for action in agent.actionSpace[5:]:
-                    if proposeStringOpposite in action:
-                        new_state.append(1)
-                    else:
-                        new_state.append(0)
+                # proposeStringOpposite = 'value-' + str(1 - agent.proposeValue)
+                # new_state.append(0)
+                # new_state = (new_state + [1]*4)
+                # for action in agent.actionSpace[5:]:
+                #     if proposeStringOpposite in action:
+                #         new_state.append(1)
+                #     else:
+                #         new_state.append(0)
             if curr_sim_len%4 == 3:
+                new_state = (new_state + ([0]*len(agent.actionSpace)))
                 #Balance for equivocation
-                new_state = (new_state + [0]*5)
-                new_state.append(1)
-                new_state.append(0)
-                new_state.append(1)
-                new_state.append(0)
+                # new_state = (new_state + [0]*5)
+                # new_state.append(1)
+                # new_state.append(0)
+                # new_state.append(1)
+                # new_state.append(0)
             
 
 

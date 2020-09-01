@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp60-syncBA-4RoundFull-NoPenalty")
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp62-syncBA-4RoundFull-5Agents")
     logger.save_config(locals())
 
     # Random seed
@@ -248,7 +248,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             
 
             #Log in trajectory
-            for agent in env.allAgents:
+            for agent in env.byzantine_agents:
                 single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actionString, agent.status_values, agent.statusValue, agent.proposeValue))
            
            ## Print out safety violation
@@ -337,11 +337,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 print('---------')
             print("number of sims: ", sims)
             print('---------')
-            print("action dic:")
-            for k, v in byzantine_action_dic.items():
-                print(k, v)
-                print('---------')
-            print('=============================')
+            # print("action dic:")
+            # for k, v in byzantine_action_dic.items():
+            #     print(k, v)
+            #     print('---------')
+            # print('=============================')
         # Save model
         if epoch == epochs-1:
             logger.save_state({'env': env}, None)

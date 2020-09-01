@@ -26,6 +26,17 @@ class Scenario(BaseScenario):
     def setup_world(self, params):
         byzantine_inds = np.random.choice(range(params['num_agents']), size=params['num_byzantine'] ,replace=False)
 
+        # Set a byzantine leader
+        index = np.random.choice([0,params['num_byzantine']-1])
+        leader_inds = []
+        counter = 0
+        for byzantine_index in byzantine_inds:
+            if counter == index:
+                leader_inds.append(True)
+            else:
+                leader_inds.append(False)
+            counter+=1
+
         give_inits = list(np.random.choice([0,1], params['num_agents']))
 
         one_value = False
@@ -34,10 +45,12 @@ class Scenario(BaseScenario):
 
         honest_agents = []
         byzantine_agents = []
+        byzantine_index = 0
         agents = []
         for i in range(params['num_agents']):
             if i in byzantine_inds:
-                byzantine_agents.append(Byzantine_Agent(params, i, give_inits, byzantine_inds))
+                byzantine_agents.append(Byzantine_Agent(params, i, give_inits, byzantine_inds, leader_inds[byzantine_index]))
+                byzantine_index+=1
             else:
                 honest_agents.append(Honest_Agent(params, i, give_inits))
                 
@@ -63,10 +76,11 @@ class Scenario(BaseScenario):
         safety_violation = False
         for byz_agent in world.byzantine_agents:
             if curr_sim_len%4 == 1:
-                pass
+                if 'v-1' in byz_agent.actionString and 'v-0' in byz_agent.actionString: 
+                    byz_agent.reward += params['equivocation_penalty']
             if curr_sim_len%4 == 2:
-                pass
-                # byz_agent.reward += params['first_round_reward']
+                if 'v-1' in byz_agent.actionString and 'v-0' in byz_agent.actionString and byz_agent.isLeader: 
+                    byz_agent.reward += params['equivocation_penalty']
                 # if world.byzantineEquivocate:
                 #     byz_agent.reward += params['equivocation_penalty']
             if curr_sim_len%4 == 3:
@@ -85,6 +99,9 @@ class Scenario(BaseScenario):
                 #If one agent has committed and the other hasn't, give a reward
                 if (2 in comm_values) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
+                elif 1 in comm_values and 0 in comm_values and 2 in comm_values:
+                    byz_agent.reward += params['safety_reward']
+                    safety_violation = True
                 elif 1 in comm_values and 0 in comm_values:
                     byz_agent.reward += params['safety_reward']
                     safety_violation = True

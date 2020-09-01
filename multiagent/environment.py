@@ -46,8 +46,12 @@ class MultiAgentEnv(gym.Env):
 
         ##TODO: change if not a byzantine agent
         self.observation_space = spaces.Box(0, 3, (len(self.byzantine_agents[0].state),), dtype=np.uint8)
-        self.leader = self.byzantine_agents[0]
-        print("I am: ", self.leader)
+
+        # Set leader
+        for agent in self.allAgents:
+            if agent.isLeader:
+                self.leader = agent
+                break
         # self.observation_space = []
 
         # self.action_space = []
@@ -64,12 +68,12 @@ class MultiAgentEnv(gym.Env):
         done_n = []
         info_n = {'n': []}
 
-        ## Set the leader & view change in round 5
-        if curr_sim_len == 1:
-            self.byzantine_agents[0].isLeader = True
+        ## View Change
         if curr_sim_len == 5:
-            self.byzantine_agents[0].isLeader = False
-            index = np.random.choice([0,1])
+            # Remove current byzantine leader
+            self.leader.isLeader = False
+            #Choose an honest leader
+            index = np.random.choice([0,len(self.honest_agents)-1])
             self.leader = self.honest_agents[index]
             self.honest_agents[index].isLeader = True
 
