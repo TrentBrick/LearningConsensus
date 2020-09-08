@@ -91,11 +91,11 @@ def initialize_parameters():
 
     ###Byzantine Rewards
     parser.add_argument("--honest_incorrect_commit", action ='store', type=float, default = [1], nargs='+')
-    parser.add_argument("--honest_correct_commit", action ='store', type=float, default = [-1], nargs='+')
+    parser.add_argument("--honest_correct_commit", action ='store', type=float, default = [-500], nargs='+')
     parser.add_argument("--additional_round_reward", action ='store', type=float, default = [0.3], nargs='+')
     parser.add_argument("--no_equivocation_reward", action ='store', type=float, default = [.3], nargs='+')
     parser.add_argument("--equivocation_penalty", action ='store', type=float, default = [-.3], nargs='+')
-    parser.add_argument("--termination_reward", action='store', type=float, default=[25], nargs='+')
+    parser.add_argument("--termination_reward", action='store', type=float, default=[0], nargs='+')
     parser.add_argument("--safety_reward", action='store', type=float, default=[500], nargs='+')
 
 

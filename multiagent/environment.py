@@ -65,8 +65,13 @@ class MultiAgentEnv(gym.Env):
         info_n = {'n': []}
 
         ## Set the leader & view change in round 5
-        if curr_sim_len == 1:
-            self.byzantine_agents[0].isLeader = True
+        # if curr_sim_len == 1:
+        #     self.byzantine_agents[0].isLeader = True
+        # if curr_sim_len == 5:
+        #     self.byzantine_agents[0].isLeader = False
+        #     index = np.random.choice([0,1])
+        #     self.leader = self.honest_agents[index]
+        #     self.honest_agents[index].isLeader = True
         if curr_sim_len == 5:
             self.byzantine_agents[0].isLeader = False
             index = np.random.choice([0,1])
@@ -88,7 +93,8 @@ class MultiAgentEnv(gym.Env):
             
         #record if the leader has equivocated
         if curr_sim_len%4 == 2 and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
-            self.world.byzantineEquivocate = True
+            # self.world.byzantineEquivocate = True
+            pass
 
         # advance world state
         self.world.step(curr_sim_len)

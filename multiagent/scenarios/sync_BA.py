@@ -85,10 +85,12 @@ class Scenario(BaseScenario):
                 #If one agent has committed and the other hasn't, give a reward
                 if (2 in comm_values) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
+                elif len(set(comm_values)) == 1 and 2 in comm_values:
+                    byz_agent.reward += params['termination_reward']
                 elif 1 in comm_values and 0 in comm_values:
                     byz_agent.reward += params['safety_reward']
                     safety_violation = True
-                elif (len(set(comm_values)) is 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
+                elif (len(set(comm_values)) == 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
                     sim_done = True
         
