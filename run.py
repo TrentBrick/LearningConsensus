@@ -115,6 +115,22 @@ def initialize_parameters():
     parser.add_argument("--null_message_val", type=int, action='store', nargs='+', default = [2], help='')
     ###This value will be set as a function of commit_vals and num_agents
 
+
+    ## Evo Training. Taken and modified from: https://github.com/hardmaru/estool
+    '''parser.add_argument("--evo", type=buildBool, action='store', nargs='+', default = [False], help='')
+    parser.add_argument('-o', '--optimizer', type=str, help='ses, pepg, openes, ga, cma.', default='cma')
+    parser.add_argument('-e', '--num_episode', type=int, default=1, help='num episodes per trial')
+    parser.add_argument('--eval_steps', type=int, default=25, help='evaluate every eval_steps step')
+    parser.add_argument('-n', '--num_worker', type=int, default=8)
+    parser.add_argument('-t', '--num_worker_trial', type=int, help='trials per worker (how many sets of parameters each worker tries', default=4)
+    parser.add_argument('--antithetic', type=int, default=1, help='set to 0 to disable antithetic sampling')
+    parser.add_argument('--cap_time', type=int, default=0, help='set to 0 to disable capping timesteps to 2x of average.')
+    parser.add_argument('--retrain', type=int, default=0, help='set to 0 to disable retraining every eval_steps if results suck.\n only works w/ ses, openes, pepg.')
+    parser.add_argument('-s', '--seed_start', type=int, default=111, help='initial seed')
+    parser.add_argument('--sigma_init', type=float, default=0.10, help='sigma_init')
+    parser.add_argument('--sigma_decay', type=float, default=0.999, help='sigma_decay')
+    '''
+
     args = parser.parse_args()
 
     args.hidden_sizes = buildTuple(args.hidden_sizes)
@@ -150,6 +166,21 @@ def initialize_parameters():
         print('combo of params is:', pg[i])
         params = pg[i]
 
+        '''if params['evo']:
+
+            if params['scenario'] == 'honest_basic':
+                env = make_env(params, "honest_basic")
+                
+            elif params['scenario'] == 'honest_byzantine':
+                env = make_env(params, "honest_byzantine")
+                
+            elif params['scenario'] == 'sync_BA':
+                env = make_env(params, "sync_BA")
+
+            evo_trainer(env, params)
+
+        else: '''
+
         if params['scenario'] == 'honest_basic':
             env = make_env(params, "honest_basic")
             ppo_gym(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
@@ -159,7 +190,7 @@ def initialize_parameters():
         elif params['scenario'] == 'sync_BA':
             env = make_env(params, "sync_BA")
             ppo_syncBA(env, params, steps_per_epoch=params['actions_per_epoch']/params['ncores'], epochs=params['epochs'], max_ep_len=1000)
- 
+
         else: 
             raise ValueError('Cannot recognize the scenario provided.')
 

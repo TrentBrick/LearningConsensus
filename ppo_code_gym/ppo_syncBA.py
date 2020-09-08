@@ -9,7 +9,7 @@ from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from ppo_code_gym.buffer import MultiAgentPPOBuffer
-
+from sys import platform
 
 def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
@@ -96,7 +96,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp62-syncBA-4RoundFull-NoEquiv")
+    if platform == "darwin":
+        # Trenton
+        logger = EpochLogger(output_dir="runs/test")
+    else: 
+        logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp62-syncBA-4RoundFull-NoEquiv")
     logger.save_config(locals())
 
     # Random seed
@@ -197,6 +201,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     # Prepare for interaction with environment
     start_time = time.time()
     o_list, honest_ep_ret, byzantine_ep_ret, ep_len = env.reset(), 0, 0, 0
+    
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs): 
         round_len = 1
