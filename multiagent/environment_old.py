@@ -65,7 +65,7 @@ class MultiAgentEnv(gym.Env):
                 agent.last_action_etc['obs'] = agent.state
                 agent.last_action_etc['act'] = action_n[ind]
         # advance world state
-        #self.world.step()
+        self.world.step()
         # record reward for each agent
         sim_done, reward_n = self._get_reward(curr_sim_len)
         # record observation for each agent
