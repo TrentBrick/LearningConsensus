@@ -1,14 +1,19 @@
 """ Define controller """
 import torch
 import torch.nn as nn
+import numpy as np
 
 class Policy(nn.Module):
     """ Decision making policy """
     def __init__(self, inputt, output, activation=nn.ReLU, output_activation=nn.Identity, 
-    hiddens = [16,16]):
+    hiddens = [16,8]):
         super().__init__()
 
-        sizes = [inputt]+hiddens+[output]
+        print('inputs to nn', inputt, output, hiddens)
+
+        inputt = int(inputt.shape[0]) * 3
+
+        sizes = [inputt]+hiddens+[output.n]
 
         layers = []
         for j in range(len(sizes)-1):
@@ -19,5 +24,18 @@ class Policy(nn.Module):
 
     def forward(self, *inputs):
         # returns argmax decision. 
-        cat_in = torch.cat(inputs, dim=1)
-        return torch.argmax(self.fc(cat_in))
+        #print('inputs are', inputs)
+
+        hots = []
+        for i in inputs[0]: 
+            temp = np.zeros(3)
+            temp[int(i)] = 1
+            hots.append(temp)
+
+        hots = torch.Tensor(hots).view(1,-1)
+        #print('hots is', hots, hots.shape)
+        #cat_in = torch.cat(hots, dim=0).unsqueeze(0)
+        #print('into nn', cat_in)
+        out = self.fc(hots)
+        #print('out of nn', out)
+        return torch.argmax(out)

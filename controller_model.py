@@ -8,7 +8,7 @@ import numpy as np
 from policy import Policy
 import pickle
 #from ha_env import make_env
-from multiagent.make_env import make_env as make_game_env
+from multiagent.make_env_old import make_env as make_game_env
 #import gym
 #import gym.envs.box2d
 
@@ -56,7 +56,7 @@ def load_parameters(params, policy):
 
 class Models:
 
-    def __init__(self, env, time_limit, 
+    def __init__(self, time_limit, 
         mdir=None, return_events=False, give_models=None, parameters=None):
         """ policy and environment. """
 
@@ -66,8 +66,9 @@ class Models:
         self.time_limit = time_limit
 
         #print('loadin in policy.')
-        self.env= self.make_env()
-        self.policy = Policy(env.observation_space, env.action_space)
+        self.make_env()
+        print('env is:', self.env)
+        self.policy = Policy(self.env.observation_space, self.env.action_space)
 
         # load policy if it was previously saved
         '''
@@ -80,7 +81,7 @@ class Models:
 
     def make_env(self):
         if self.params['scenario'] == 'honest_basic':
-            env = make_game_env(self.params, "honest_basic")
+            self.env = make_game_env(self.params, "honest_basic")
                 
 
         # need to alter the way that rewards are computed first. 
@@ -89,8 +90,6 @@ class Models:
             
         elif params['scenario'] == 'sync_BA':
             env = make_env(self.params, "sync_BA")'''
-
-        return env
 
     def rollout(self, rand_env_seed, params=None, render=False, time_limit=None):
         """ Execute a rollout and returns minus cumulative reward.
@@ -114,15 +113,13 @@ class Models:
         #random(rand_env_seed)
         np.random.seed(rand_env_seed)
         torch.manual_seed(rand_env_seed)
-        self.env = self.make_env()
-        o_list, honest_ep_ret, byzantine_ep_ret, ep_len = env.reset(), 0, 0, 0
+        self.make_env()
+        o_list, honest_ep_ret, byzantine_ep_ret, ep_len = self.env.reset(), 0, 0, 0
         #self.env.seed(int(rand_env_seed)) # ensuring that each rollout has a differnet random seed. 
         #obs = self.env.reset()
 
         # This first render is required !
         #self.env.render()
-
-
         cumulative = 0
         i = 0
         #if self.return_events: 
@@ -130,10 +127,26 @@ class Models:
         while True:
             #print('iteration of the rollout', i)
 
-            action = self.policy(o_list)
+            # observations for each agent!!! Need to loop through... 
+
+            actions = []
+            for i, agent in enumerate(self.env.agents):
+                if agent.committed_value is False:
+                    action = self.policy(torch.as_tensor(o_list[i], dtype=torch.float32))
+                else: 
+                    action = agent.actionIndex
+                
+                actions.append(action)
+
+            for ind, agent in enumerate(self.env.agents):
+                #print('actions decided are:', actions)
+                agentActionString = agent.actionSpace[actions[ind]]
+                if 'commit' in agentActionString:
+                    print('agent action string:', agentActionString)
+                    agent.committed_value = int(agentActionString.split('_')[1])
 
             # CNA THEY NOT ALL STEP TOGETHER? 
-            next_o, r_list, d_list, info_n_list, sim_done, safety_violation = self.env.step(action)
+            next_o, r_list, d_list, info_n_list, sim_done = self.env.step(actions, i)
 
             reward = sum(r_list)
 

@@ -42,7 +42,7 @@ class MultiAgentEnv(gym.Env):
         self.time = 0
 
         ### NEED TO UPDATE THIS EVERY TIME DEPENDING ON WHICH AGENT IS DOING WHAT ###
-        self.action_space = spaces.Discrete(self.byzantine_agents[0].actionDims)
+        en
 
         ##TODO: change if not a byzantine agent
         self.observation_space = spaces.Box(0, 3, (len(self.byzantine_agents[0].state),), dtype=np.uint8)

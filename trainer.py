@@ -55,8 +55,8 @@ def initialize_settings(parameters, sigma_init=0.1, sigma_decay=0.9999):
     #game = config.games[scenario]
 
     # TODO: init the controller model. and VAE and MDRNN. 
-    model = Models(scenario, 1000, mdir = 'exp_dir', parameters=parameters) # time limit
-    num_params = len( flatten_parameters(model.controller.parameters()) )
+    model = Models( 1000, mdir = 'exp_dir', parameters=parameters) # time limit
+    num_params = len( flatten_parameters(model.policy.parameters()) )
     print("size of model", num_params)
 
     if optimizer == 'ses':
@@ -320,7 +320,7 @@ def master():
 
         # TODO: update the model parameters here. Why are they quantized and set here? 
         #sprint('master model controller about to load in')
-        model.controller = load_parameters(np.array(model_params).round(4), model.controller)
+        model.policy = load_parameters(np.array(model_params).round(4), model.policy)
         #sprint('loaded in master model controller')
         r_max = int(np.max(reward_list)*100)/100.
         r_min = int(np.min(reward_list)*100)/100.
@@ -433,9 +433,29 @@ if __name__ == "__main__":
     parser.add_argument("--num_agents", type=int, action='store', default = 3, help='overall number of agents in simulation')
 
     parser.add_argument("--commit_vals", action ='store', type=str, default = '(0,1)', help="Commit values. -commit_vals (0,1) (2,0)")
+    parser.add_argument("--max_round_len", action ='store', type=int, default = 32, help="")
     parser.add_argument("--null_message_val", type=int, action='store', default = 2, help='')
-    #parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = 1, help='overall number of byzantine agents in simulation')
-    #parser.add_argument("--sample_k_size", action ='store', type=float, default = [2], nargs='+')
+    
+    parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = 0.3)
+    parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = -1.0)
+    parser.add_argument("--consistency_violation", action ='store', type=float, default = -3.0, help='from the perspective of the honest. The inverse is applied to the Byzantine')
+    parser.add_argument("--validity_violation", action ='store', type=float, default = -3.0)
+    parser.add_argument("--majority_violation", action ='store', type=float, default = -25.0)
+    parser.add_argument("--correct_commit", action ='store', type=float, default = -1.0)
+    parser.add_argument("--incorrect_commit", action ='store', type=float, default = 1.0)
+    parser.add_argument("--additional_round_penalty", action ='store', type=float, default = -0.1)
+    parser.add_argument("--termination_penalty", action ='store', type=float, default = -3.0)
+    parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = .6)
+    parser.add_argument("--send_incorrect_majority_value_penalty", action ='store', type=float, default = -.3)
+    # Sync BA Rewards
+    parser.add_argument("--first_round_reward", action ='store', type=float, default = 0)
+    parser.add_argument("--PKI_penalty", action ='store', type=float, default = -1)
+    parser.add_argument("--PKI_reward", action ='store', type=float, default = .25)
+
+    
+    
+    #parser.add_argument("--num_byzantine", type=int, action='store', default = 1, help='overall number of byzantine agents in simulation')
+    #parser.add_argument("--sample_k_size", action ='store', type=float, default = [2])
 
 
     args = parser.parse_args()
