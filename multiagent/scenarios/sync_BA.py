@@ -61,18 +61,38 @@ class Scenario(BaseScenario):
         sim_done = False
         reward_list = []
         safety_violation = False
+
+        oneCount = 0
+        zeroCount = 0
+        for agent in world.honest_agents:
+            if agent.roundValue == 1:
+                oneCount += 1
+            if agent.roundValue == 0:
+                zeroCount +=1 
+        quorum = (params['num_agents']+1)/2
+        quorumVal = False
+        if oneCount >= quorum:
+            quorumVal = oneCount
+        if zeroCount >= quorum:
+            quorumVal = zeroCount
+
         for byz_agent in world.byzantine_agents:
             if curr_sim_len%4 == 1:
                 pass
+                    
             if curr_sim_len%4 == 2:
-                pass
+                # Agent received f+1 statuses for a single value and must propose that value
+                if byz_agent.isLeader:
+                    if quorumVal != False:
+                        if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString:
+                            byz_agent.reward += params['equivocation_penalty']*2
                 # byz_agent.reward += params['first_round_reward']
-                # if world.byzantineEquivocate:
-                #     byz_agent.reward += params['equivocation_penalty']
+                if world.byzantineEquivocate:
+                    byz_agent.reward += params['equivocation_penalty']
             if curr_sim_len%4 == 3:
-                pass
-                # if world.byzantineEquivocate:
-                #     byz_agent.reward += params['equivocation_penalty']
+                if world.byzantineEquivocate:
+                    # byz_agent.reward += params['equivocation_penalty']
+                    pass
                 # if byz_agent.prevActionString != byz_agent.actionString:
                 #     byz_agent.reward += params['PKI_penalty']
                 # else:
@@ -86,7 +106,7 @@ class Scenario(BaseScenario):
                 if (2 in comm_values) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
                 elif len(set(comm_values)) == 1 and 2 in comm_values:
-                    byz_agent.reward += params['termination_reward']
+                    byz_agent.reward += params['termination_reward_partial']
                 elif 1 in comm_values and 0 in comm_values:
                     byz_agent.reward += params['safety_reward']
                     safety_violation = True

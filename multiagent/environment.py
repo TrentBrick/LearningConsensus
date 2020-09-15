@@ -65,18 +65,18 @@ class MultiAgentEnv(gym.Env):
         info_n = {'n': []}
 
         ## Set the leader & view change in round 5
-        # if curr_sim_len == 1:
-        #     self.byzantine_agents[0].isLeader = True
-        # if curr_sim_len == 5:
-        #     self.byzantine_agents[0].isLeader = False
-        #     index = np.random.choice([0,1])
-        #     self.leader = self.honest_agents[index]
-        #     self.honest_agents[index].isLeader = True
+        if curr_sim_len == 1:
+            self.byzantine_agents[0].isLeader = True
         if curr_sim_len == 5:
             self.byzantine_agents[0].isLeader = False
             index = np.random.choice([0,1])
             self.leader = self.honest_agents[index]
             self.honest_agents[index].isLeader = True
+        # if curr_sim_len == 9:
+        #     self.byzantine_agents[0].isLeader = False
+        #     index = np.random.choice([0,1])
+        #     self.leader = self.honest_agents[index]
+        #     self.honest_agents[index].isLeader = True
 
         self.scripted_agents = self.world.scripted_agents
         # set action for each agent
@@ -180,12 +180,14 @@ class MultiAgentEnv(gym.Env):
             # Status round #
             if agent.isLeader:
                 agent.actionString = 'pass'
+                agent.roundValue = self.params['null_message_val']
             else:
                 if agent.committed_value != self.params['null_message_val']:
                     agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.committed_value)
                     agent.roundValue = agent.committed_value
                 else:
                     agent.actionString = 'pass'
+                    agent.roudnValue = self.params['null_message_val']
             ## Reset propose values values and saved state
 
         if curr_sim_len%4 == 2:
@@ -214,7 +216,6 @@ class MultiAgentEnv(gym.Env):
             if self.world.byzantineEquivocate:
                 agent.actionString = 'no_commit'
 
-                ##Reset byzantine equivocate for next rollout
                 self.world.byzantineEquivocate = False
             else:
                 #Get majority value
@@ -230,11 +231,14 @@ class MultiAgentEnv(gym.Env):
                 if zeroCount >= quorum:
                     agent.actionString = 'commit_0'
                     agent.committed_value = 0
+                    agent.roundValue = agent.committed_value
                 elif oneCount >= quorum:
                     agent.actionString = 'commit_1'
                     agent.committed_value = 1
+                    agent.roundValue = agent.committed_value
                 else:
-                    agent.actionString = 'no_commit'  
+                    agent.actionString = 'no_commit'
+                    agent.roundValue = self.params['null_message_val']
 
     # reset rendering assets
     # def _reset_render(self):
