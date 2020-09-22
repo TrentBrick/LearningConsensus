@@ -69,6 +69,10 @@ class Models:
         self.make_env()
         print('env is:', self.env)
         self.policy = Policy(self.env.observation_space, self.env.action_space)
+        print('######################################')
+        print("action space is: ", self.env.agents[0].actionSpace)
+        print('######################################')
+
 
         # load policy if it was previously saved
         '''

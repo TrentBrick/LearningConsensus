@@ -414,9 +414,27 @@ def mpi_fork(n):
         print('assigning the rank and nworkers', nworkers, rank)
         return "child"
 
+def buildTuple(argument):
+    count = 0
+    values = []
+    curr_tuple = ()
+    print(argument)
+    for val in argument:
+        val = val.replace("(", ",")
+        val = val.replace(")", ",")
+        val = val.split(",")
+        print(val)
+        for element in range(0, len(val)):
+            if val[element] is not "":
+                curr_tuple = curr_tuple + (int(val[element]),)
+        values.append(curr_tuple)
+        curr_tuple = ()
+        count = count + 1
+    print (values)
+    return values
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=('Train policy on OpenAI Gym environment '
-                                                                                                'using pepg, ses, openes, ga, cma'))
+    parser = argparse.ArgumentParser(description=('Train policy on OpenAI Gym environment using pepg, ses, openes, ga, cma'))
     parser.add_argument('scenario', type=str, default='honest_basic', help='robo_pendulum, robo_ant, robo_humanoid, etc.')
     parser.add_argument('-o', '--optimizer', type=str, help='ses, pepg, openes, ga, cma.', default='cma')
     parser.add_argument('-e', '--num_episode', type=int, default=1, help='num episodes per trial')
@@ -432,7 +450,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--num_agents", type=int, action='store', default = 3, help='overall number of agents in simulation')
 
-    parser.add_argument("--commit_vals", action ='store', type=str, default = '(0,1)', help="Commit values. -commit_vals (0,1) (2,0)")
+    parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
     parser.add_argument("--max_round_len", action ='store', type=int, default = 32, help="")
     parser.add_argument("--null_message_val", type=int, action='store', default = 2, help='')
     
@@ -459,7 +477,12 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
+    args.commit_vals = buildTuple(args.commit_vals)
+    args.commit_vals = [0,1]
+
     
     if "parent" == mpi_fork(args.num_worker+1): os.exit()
     main(args)
+
+
 
