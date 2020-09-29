@@ -38,4 +38,4 @@ class Policy(nn.Module):
         #print('into nn', cat_in)
         out = self.fc(hots)
         #print('out of nn', out)
-        return torch.argmax(out)
+        return out #torch.argmax(out)

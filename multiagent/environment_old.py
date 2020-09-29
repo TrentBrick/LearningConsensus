@@ -4,6 +4,7 @@ from gym.envs.registration import EnvSpec
 import numpy as np
 # from multiagent.multi_discrete import MultiDiscrete
 from multiagent.multi_utils import MultiAgentActionSpace, MultiAgentObservationSpace
+import time 
 
 # environment for all agents in the multiagent world
 # currently code assumes that no agents will be created/destroyed at runtime!
@@ -53,6 +54,8 @@ class MultiAgentEnv(gym.Env):
         #     self.action_space.append(spaces.Discrete(self.agents[0].actionDims))
 
     def step(self, action_n, curr_sim_len):
+        #print("step in the environment", action_n, curr_sim_len)
+        #time.sleep(1)
         obs_n = []
         reward_n = []
         done_n = []

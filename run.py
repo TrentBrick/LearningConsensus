@@ -10,7 +10,10 @@ import pandas as pd
 import consensus_env
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
-from multiagent.make_env import make_env
+
+#from multiagent.make_env import make_env
+from multiagent.make_env_old import make_env
+
 from ppo_code_gym.ppo import ppo as ppo_gym
 from ppo_code_gym.ppo_honestNoUpdate_byzantine import ppo as ppo_honestNoUpdate_byzantine
 from ppo_code_gym.ppo_syncBA import ppo as ppo_syncBA

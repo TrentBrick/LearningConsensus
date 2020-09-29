@@ -9,6 +9,7 @@ from policy import Policy
 import pickle
 #from ha_env import make_env
 from multiagent.make_env_old import make_env as make_game_env
+from torch.distributions import Categorical
 #import gym
 #import gym.envs.box2d
 
@@ -56,14 +57,15 @@ def load_parameters(params, policy):
 
 class Models:
 
-    def __init__(self, time_limit, 
+    def __init__(self, 
         mdir=None, return_events=False, give_models=None, parameters=None):
         """ policy and environment. """
 
         self.params = parameters
         print("parameters being used", parameters)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.time_limit = time_limit
+        self.time_limit = parameters['max_round_len']
+        self.temperature = parameters['temperature']
 
         #print('loadin in policy.')
         self.make_env()
@@ -95,7 +97,7 @@ class Models:
         elif params['scenario'] == 'sync_BA':
             env = make_env(self.params, "sync_BA")'''
 
-    def rollout(self, rand_env_seed, params=None, render=False, time_limit=None):
+    def rollout(self, rand_env_seed, params=None, render=False):
         """ Execute a rollout and returns minus cumulative reward.
 
         Load :params: into the policy and execute a single rollout. This
@@ -111,9 +113,6 @@ class Models:
         if params is not None:
             self.policy = load_parameters(params, self.policy)
 
-        if not time_limit: 
-            time_limit = self.time_limit 
-
         #random(rand_env_seed)
         np.random.seed(rand_env_seed)
         torch.manual_seed(rand_env_seed)
@@ -125,18 +124,21 @@ class Models:
         # This first render is required !
         #self.env.render()
         cumulative = 0
-        i = 0
+        round_len = 0
         #if self.return_events: 
         #    rollout_dict = {k:[] for k in ['obs', 'rew', 'act', 'term']}
         while True:
-            #print('iteration of the rollout', i)
+
+            #print('iteration of the rollout', round_len, rand_env_seed)
 
             # observations for each agent!!! Need to loop through... 
 
             actions = []
-            for i, agent in enumerate(self.env.agents):
+            for a_ind, agent in enumerate(self.env.agents):
                 if agent.committed_value is False:
-                    action = self.policy(torch.as_tensor(o_list[i], dtype=torch.float32))
+                    action_logits = self.policy(torch.as_tensor(o_list[a_ind], dtype=torch.float32))
+                    action = Categorical(torch.softmax(action_logits, dim=1)/self.temperature).sample()
+                    
                 else: 
                     action = agent.actionIndex
                 
@@ -146,11 +148,14 @@ class Models:
                 #print('actions decided are:', actions)
                 agentActionString = agent.actionSpace[actions[ind]]
                 if 'commit' in agentActionString:
-                    print('agent action string:', agentActionString)
+                    #print('committed! agent action string:', agentActionString)
                     agent.committed_value = int(agentActionString.split('_')[1])
 
+                #print('action string is:', agentActionString, ind, rand_env_seed)
+
+
             # CNA THEY NOT ALL STEP TOGETHER? 
-            next_o, r_list, d_list, info_n_list, sim_done = self.env.step(actions, i)
+            next_o, r_list, d_list, info_n_list, sim_done = self.env.step(actions, round_len)
 
             reward = sum(r_list)
 
@@ -162,19 +167,19 @@ class Models:
                     rollout_dict[key].append(var)'''
 
             cumulative += reward
-            if sim_done or i > time_limit:
+            if sim_done or round_len > self.time_limit:
                 #print('done with this simulation')
                 '''if self.return_events:
                     for k,v in rollout_dict.items():
                         rollout_dict[k] = np.array(v)
                     return cumulative, rollout_dict
                 else: '''
-                return cumulative, i # ending time and cum reward
-            i += 1
+                return cumulative, round_len # ending time and cum reward
+            round_len += 1
 
     def simulate(self, params, train_mode=True, 
         render_mode=False, num_episode=16, 
-        seed=27, max_len=1000): # run lots of rollouts 
+        seed=27): # run lots of rollouts 
 
         #print('seed recieved for this set of simulations', seed)
         # update params into the policy
@@ -183,9 +188,6 @@ class Models:
         recording_mode = False
         penalize_turning = False
 
-        if train_mode and max_len < 0:
-            max_episode_length = max_len
-
         #random(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -193,15 +195,14 @@ class Models:
         reward_list = []
         t_list = []
 
-        if max_len ==-1:
-            max_len = 10000 # making it very long
-
         with torch.no_grad():
             for i in range(num_episode):
 
                 rand_env_seed = np.random.randint(0,1e9,1)[0]
+                #print('starting new rollout')
                 rew, t = self.rollout(rand_env_seed, render=render_mode, 
-                            params=None, time_limit=max_len)
+                            params=None)
+                #print('finished a rollout')
                 reward_list.append(rew)
                 t_list.append(t)
 

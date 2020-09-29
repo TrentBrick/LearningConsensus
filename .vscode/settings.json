@@ -1,5 +1,5 @@
 {
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
-    "python.pythonPath": "/Users/yash/opt/anaconda3/envs/spinningup/bin/python"
+    "python.pythonPath": "/Users/trentonbricken/anaconda3/bin/python"
 }

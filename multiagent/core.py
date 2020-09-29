@@ -2,10 +2,7 @@ import numpy as np
 from consensus_env import getActionSpace, actionEffect
 import itertools
 from collections import OrderedDict
-
 import torch
-    
-
 
 class Honest_Agent:
 

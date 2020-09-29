@@ -55,7 +55,7 @@ def initialize_settings(parameters, sigma_init=0.1, sigma_decay=0.9999):
     #game = config.games[scenario]
 
     # TODO: init the controller model. and VAE and MDRNN. 
-    model = Models( 1000, mdir = 'exp_dir', parameters=parameters) # time limit
+    model = Models(mdir = 'exp_dir', parameters=parameters) # time limit
     num_params = len( flatten_parameters(model.policy.parameters()) )
     print("size of model", num_params)
 
@@ -177,7 +177,7 @@ def worker(weights, seed, train_mode_int=1, max_len=-1):
     # TODO: run the simulation here. need to return the rewards and the end times of each. 
     #sprint('starting worker simulation, seed', seed)
     reward_list, t_list = model.simulate(weights, train_mode=train_mode, render_mode=False, 
-        num_episode=num_episode, seed=seed, max_len=max_len)
+        num_episode=num_episode, seed=seed)
     #sprint('finished worker simulations, seed', seed)
     if batch_mode == 'min':
         reward = np.min(reward_list)
@@ -327,7 +327,7 @@ def master():
 
         curr_time = int(time.time()) - start_time
 
-        h = (t, curr_time, avg_reward, r_min, r_max, std_reward, int(es.rms_stdev()*100000)/100000., mean_time_step+1., int(max_time_step)+1)
+        h = (t, curr_time, avg_reward, r_min, r_max, std_reward, int(es.rms_stdev()*100000)/100000., mean_time_step+1., max_time_step+1.)
 
         if cap_time_mode:
             max_len = 2*int(mean_time_step+1.0)
@@ -342,6 +342,7 @@ def master():
         with open(filename_hist, 'wt') as out:
             res = json.dump(history, out, sort_keys=False, indent=0, separators=(',', ':'))
 
+        sprint('iteration, wall time, avg rew, min, max, std, time things, mean and max time steps')
         sprint('================================',scenario, h)
 
         if (t == 1):
@@ -435,13 +436,20 @@ def buildTuple(argument):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('Train policy on OpenAI Gym environment using pepg, ses, openes, ga, cma'))
-    parser.add_argument('scenario', type=str, default='honest_basic', help='robo_pendulum, robo_ant, robo_humanoid, etc.')
+    parser.add_argument('--scenario', type=str, default='honest_basic', help='environment to train in. ')
     parser.add_argument('-o', '--optimizer', type=str, help='ses, pepg, openes, ga, cma.', default='cma')
-    parser.add_argument('-e', '--num_episode', type=int, default=1, help='num episodes per trial')
+    
     parser.add_argument('--eval_steps', type=int, default=25, help='evaluate every eval_steps step')
-    parser.add_argument('-n', '--num_worker', type=int, default=3)
-    parser.add_argument('-t', '--num_worker_trial', type=int, help='trials per worker (how many sets of parameters each worker tries', default=4)
-    parser.add_argument('--antithetic', type=int, default=1, help='set to 0 to disable antithetic sampling')
+
+    # NUMBER OF CORES
+    parser.add_argument('-n', '--num_worker', type=int, default=4)
+    parser.add_argument('--temperature', type=float, help='temp to use', default=1.0)
+
+    # TRIALS PER EVO STEP
+    parser.add_argument('-e', '--num_episode', type=int, default=50, help='num episodes per trial')
+    parser.add_argument('-t', '--num_worker_trial', type=int, help='trials per worker (how many sets of parameters each worker tries', default=32)
+    
+    parser.add_argument('--antithetic', type=int, default=0, help='set to 0 to disable antithetic sampling')
     parser.add_argument('--cap_time', type=int, default=0, help='set to 0 to disable capping timesteps to 2x of average.')
     parser.add_argument('--retrain', type=int, default=0, help='set to 0 to disable retraining every eval_steps if results suck.\n only works w/ ses, openes, pepg.')
     parser.add_argument('-s', '--seed_start', type=int, default=111, help='initial seed')
