@@ -36,8 +36,8 @@ def initialize_parameters():
     # Environment Settings
     parser.add_argument("--scenario", type=str, action='store', nargs='+', default = ['sync_BA'], help='What scenario is desired? honest_basic, honest_byzantine and honest_byzantine_pki are current options as of May 28th.')
     parser.add_argument("--commit_vals", action ='store', type=str, default = ['(0,1)'], nargs='+', help="Commit values. -commit_vals (0,1) (2,0)")
-    parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [5], help='overall number of agents in simulation')
-    parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [2], help='overall number of byzantine agents in simulation')
+    parser.add_argument("--num_agents", type=int, action='store', nargs='+', default = [11], help='overall number of agents in simulation')
+    parser.add_argument("--num_byzantine", type=int, action='store', nargs='+', default = [5], help='overall number of byzantine agents in simulation')
     parser.add_argument("--sample_k_size", action ='store', type=float, default = [2], nargs='+')
 
     #parser.add_arguemnt("--action_space", type=int, action='store', nargs='+', default=[0,2], help='actions that agent can take - default is send init value and commit to a value')
@@ -96,7 +96,8 @@ def initialize_parameters():
     parser.add_argument("--no_equivocation_reward", action ='store', type=float, default = [.3], nargs='+')
     parser.add_argument("--equivocation_penalty", action ='store', type=float, default = [-25], nargs='+')
     parser.add_argument("--termination_reward", action='store', type=float, default=[25], nargs='+')
-    parser.add_argument("--safety_reward", action='store', type=float, default=[500], nargs='+')
+    parser.add_argument("--termination_reward_partial", action='store', type=float, default=[5], nargs='+')
+    parser.add_argument("--safety_reward", action='store', type=float, default=[5], nargs='+')
 
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')

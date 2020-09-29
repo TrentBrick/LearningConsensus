@@ -93,7 +93,10 @@ def getByzantineActionSpace(params):
 def sync_BA_effect(params, agent_list, actionStr, actor_prev_action_result, receiver_id, curr_sim_len):
     if curr_sim_len%4 == 1:
         if 'agent-' + str(receiver_id) in actionStr:
+            try:
                 return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+            except:
+                return params['null_message_val']
         else:
             return params['null_message_val']
         # if actionStr == 'pass':
@@ -108,7 +111,10 @@ def sync_BA_effect(params, agent_list, actionStr, actor_prev_action_result, rece
         if 'send_to-all' in actionStr:
             return int(actionStr.split('_')[-1])    
         elif 'agent-'+str(receiver_id) in actionStr:
-            return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+            try:
+                return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+            except:
+                return params['null_message_val']
         else:
             return params['null_message_val']
 
@@ -116,7 +122,10 @@ def sync_BA_effect(params, agent_list, actionStr, actor_prev_action_result, rece
         if 'send_to-all' in actionStr:
             return int(actionStr.split('_')[-1])    
         elif 'agent-'+str(receiver_id) in actionStr:
-            return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+            try:
+                return int(actionStr.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+            except:
+                return params['null_message_val']
         else:
             return params['null_message_val']
     

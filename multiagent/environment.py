@@ -68,8 +68,16 @@ class MultiAgentEnv(gym.Env):
         done_n = []
         info_n = {'n': []}
 
-        ## View Change
-        if curr_sim_len == 5:
+        ## View Change to other byzantine agent
+        # if curr_sim_len == 5:
+        #     leaderID = self.leader.agentId
+        #     self.leader.isLeader = False
+        #     for agent in self.byzantine_agents:
+        #         if agent.agentId != leaderID:
+        #             self.leader = agent
+        #             agent.isLeader = True
+        ## View change to honest agents
+        if curr_sim_len == 9:
             # Remove current byzantine leader
             self.leader.isLeader = False
             #Choose an honest leader
