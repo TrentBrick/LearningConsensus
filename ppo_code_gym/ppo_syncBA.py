@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp70-syncBA-4RoundFull-NoEquiv")
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp70-syncBA-4RoundFull-NoEquiv-RewardCheck")
     logger.save_config(locals())
 
     # Random seed
@@ -287,9 +287,9 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 for agent in env.honest_agents:
                     comm_values.append(agent.committed_value)
 
-                if sim_done and round_len <= 4:
+                if sim_done and round_len <= 5:
                     honest_wins+=1
-                if sim_done and round_len > 4:
+                if sim_done and round_len > 5:
                     byzantine_wins+=1
                 # if len(set(comm_values)) is 1:
                 #     honest_wins+=1

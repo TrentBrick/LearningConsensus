@@ -93,8 +93,8 @@ class MultiAgentEnv(gym.Env):
             
         #record if the leader has equivocated
         if curr_sim_len%4 == 2 and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
-            # self.world.byzantineEquivocate = True
-            pass
+            self.world.byzantineEquivocate = True
+            # pass
 
         # advance world state
         self.world.step(curr_sim_len)
@@ -239,6 +239,9 @@ class MultiAgentEnv(gym.Env):
                 else:
                     agent.actionString = 'no_commit'
                     agent.roundValue = self.params['null_message_val']
+        if curr_sim_len%5 == 0:
+            # Notify Round #
+
 
     # reset rendering assets
     # def _reset_render(self):
