@@ -179,6 +179,9 @@ def worker(weights, seed, train_mode_int=1, max_len=-1):
     reward_list, t_list = model.simulate(weights, train_mode=train_mode, render_mode=False, 
         num_episode=num_episode, seed=seed)
     #sprint('finished worker simulations, seed', seed)
+    #if np.max(reward_list) >0:
+    #    print('correct performance!!!')
+    #print('rewards',reward_list,' of worker seed:', seed)
     if batch_mode == 'min':
         reward = np.min(reward_list)
     else:
@@ -463,14 +466,14 @@ if __name__ == "__main__":
     parser.add_argument("--null_message_val", type=int, action='store', default = 2, help='')
     
     parser.add_argument("--send_all_first_round_reward", action ='store', type=float, default = 0.3)
-    parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = -1.0)
+    parser.add_argument("--no_send_all_first_round_penalty", action ='store', type=float, default = -3.0)
     parser.add_argument("--consistency_violation", action ='store', type=float, default = -3.0, help='from the perspective of the honest. The inverse is applied to the Byzantine')
     parser.add_argument("--validity_violation", action ='store', type=float, default = -3.0)
-    parser.add_argument("--majority_violation", action ='store', type=float, default = -25.0)
-    parser.add_argument("--correct_commit", action ='store', type=float, default = -1.0)
-    parser.add_argument("--incorrect_commit", action ='store', type=float, default = 1.0)
-    parser.add_argument("--additional_round_penalty", action ='store', type=float, default = -0.1)
-    parser.add_argument("--termination_penalty", action ='store', type=float, default = -3.0)
+    parser.add_argument("--majority_violation", action ='store', type=float, default = -5.0)
+    parser.add_argument("--correct_commit", action ='store', type=float, default = 1.0)
+    parser.add_argument("--incorrect_commit", action ='store', type=float, default = -3.0)
+    parser.add_argument("--additional_round_penalty", action ='store', type=float, default = -0.5)
+    parser.add_argument("--termination_penalty", action ='store', type=float, default = -5.0)
     parser.add_argument("--send_majority_value_reward", action ='store', type=float, default = .6)
     parser.add_argument("--send_incorrect_majority_value_penalty", action ='store', type=float, default = -.3)
     # Sync BA Rewards

@@ -6,7 +6,7 @@ import numpy as np
 class Policy(nn.Module):
     """ Decision making policy """
     def __init__(self, inputt, output, activation=nn.ReLU, output_activation=nn.Identity, 
-    hiddens = [16,8]):
+    hiddens = [8,4]):
         super().__init__()
 
         print('inputs to nn', inputt, output, hiddens)
