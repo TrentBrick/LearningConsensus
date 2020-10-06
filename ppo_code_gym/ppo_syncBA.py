@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp70-syncBA-4RoundFull-NoEquiv-RewardCheck")
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp76-syncBA-notify")
     logger.save_config(locals())
 
     # Random seed

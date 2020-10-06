@@ -21,6 +21,7 @@ class Honest_Agent:
         self.statusValue = params['null_message_val']
         self.committed_value = params['null_message_val']
         self.roundValue = params['null_message_val']
+        self.notifyValue = params['null_message_val']
         self.status_values = []
 
         self.state = self.initAgentState(params, give_inits)

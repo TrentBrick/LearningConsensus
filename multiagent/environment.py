@@ -67,16 +67,16 @@ class MultiAgentEnv(gym.Env):
         ## Set the leader & view change in round 5
         if curr_sim_len == 1:
             self.byzantine_agents[0].isLeader = True
-        if curr_sim_len == 5:
-            self.byzantine_agents[0].isLeader = False
-            index = np.random.choice([0,1])
-            self.leader = self.honest_agents[index]
-            self.honest_agents[index].isLeader = True
-        # if curr_sim_len == 9:
+        # if curr_sim_len == 5:
         #     self.byzantine_agents[0].isLeader = False
         #     index = np.random.choice([0,1])
         #     self.leader = self.honest_agents[index]
         #     self.honest_agents[index].isLeader = True
+        if curr_sim_len == 9:
+            self.byzantine_agents[0].isLeader = False
+            index = np.random.choice([0,1])
+            self.leader = self.honest_agents[index]
+            self.honest_agents[index].isLeader = True
 
         self.scripted_agents = self.world.scripted_agents
         # set action for each agent
@@ -95,6 +95,18 @@ class MultiAgentEnv(gym.Env):
         if curr_sim_len%4 == 2 and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
             self.world.byzantineEquivocate = True
             # pass
+        #record if leader hasn't proposed correct value after f+1 status votes
+
+        if self.leader.isByzantine and curr_sim_len == 6: 
+            propose_values = []
+            for agent in self.scripted_agents:
+                propose_values.append(agent.roundValue)
+            correct_propose_value = False
+            if len(propose_values) > 2 and len(set(propose_values)) == 1 and 2 not in propose_values:
+                correct_propose_value = propose_values[0]
+            incorrect_propose_value = 1 - correct_propose_value
+            if 'v-'+str(incorrect_propose_value) in self.leader.actionString:
+                self.world.byzantineIncorrectPropose = True
 
         # advance world state
         self.world.step(curr_sim_len)
@@ -177,6 +189,14 @@ class MultiAgentEnv(gym.Env):
     
     def _set_scripted_action(self, agent, curr_sim_len):
         if curr_sim_len%4 == 1:
+            # Notify
+            if agent.committed_value == self.params['null_message_val']:
+                for committed_agent in self.scripted_agents:
+                    if committed_agent.agentId == agent.agentId:
+                        pass
+                    if committed_agent.committed_value != self.params['null_message_val']:
+                        agent.notifyValue = committed_agent.committed_value
+
             # Status round #
             if agent.isLeader:
                 agent.actionString = 'pass'
@@ -185,9 +205,12 @@ class MultiAgentEnv(gym.Env):
                 if agent.committed_value != self.params['null_message_val']:
                     agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.committed_value)
                     agent.roundValue = agent.committed_value
+                elif agent.notifyValue != self.params['null_message_val']:
+                    agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.notifyValue)
+                    agent.roundValue = agent.notifyValue
                 else:
                     agent.actionString = 'pass'
-                    agent.roudnValue = self.params['null_message_val']
+                    agent.roundValue = self.params['null_message_val']
             ## Reset propose values values and saved state
 
         if curr_sim_len%4 == 2:
@@ -202,6 +225,9 @@ class MultiAgentEnv(gym.Env):
             else:
                 agent.actionString = 'pass'
 
+            # Reset notify value from previous round#
+            agent.notifyValue = self.params['null_message_val']
+
         if curr_sim_len%4 == 3:
             # Vote Round #
             if agent.proposeValue != self.params['null_message_val']:
@@ -213,11 +239,15 @@ class MultiAgentEnv(gym.Env):
 
         if curr_sim_len%4 == 0:
             # Commit Round #
-            if self.world.byzantineEquivocate:
+            if self.world.byzantineEquivocate or self.world.byzantineIncorrectPropose: 
                 agent.actionString = 'no_commit'
+                if self.world.byzantineIncorrectPropose:
+                    print("byzantine incorrect propose")
+
 
                 self.world.byzantineEquivocate = False
-            else:
+                self.world.byzantineIncorrectPropose = False
+            if not self.world.byzantineEquivocate and not self.world.byzantineIncorrectPropose:
                 #Get majority value
                 zeroCount = 0
                 oneCount = 0
@@ -239,8 +269,7 @@ class MultiAgentEnv(gym.Env):
                 else:
                     agent.actionString = 'no_commit'
                     agent.roundValue = self.params['null_message_val']
-        if curr_sim_len%5 == 0:
-            # Notify Round #
+        
 
 
     # reset rendering assets

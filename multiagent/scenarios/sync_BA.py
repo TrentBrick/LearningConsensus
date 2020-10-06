@@ -12,6 +12,7 @@ class Scenario(BaseScenario):
         world.agents, world.honest_agents, world.byzantine_agents = self.setup_world(params)
 
         world.byzantineEquivocate = False
+        world.byzantineIncorrectPropose = False
         #Majority value is irrelevant right now - will be used later 
         world.majorityValue = -1
         return world
@@ -84,8 +85,9 @@ class Scenario(BaseScenario):
                 # Agent received f+1 statuses for a single value and must propose that value
                 if byz_agent.isLeader:
                     if quorumVal != False:
-                        if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString:
+                        if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString or ('v-') + str(q-quorumVal) in byz_agent.actionString:
                             byz_agent.reward += params['equivocation_penalty']*2
+                            world.byzantineIncorrectPropose = True
                 # byz_agent.reward += params['first_round_reward']
                 if world.byzantineEquivocate:
                     byz_agent.reward += params['equivocation_penalty']
