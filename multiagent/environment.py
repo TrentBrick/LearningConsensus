@@ -99,9 +99,12 @@ class MultiAgentEnv(gym.Env):
            self._set_scripted_action(agent, curr_sim_len)
             
         #record if the leader has equivocated
-        if curr_sim_len%4 == 2 and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
+        if (curr_sim_len%4 == 2 or curr_sim_len%4 == 3) and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
             self.world.byzantineEquivocate = True
 
+        if curr_sim_len%4 == 0:
+            ##Reset byzantine equivocate for next rollout
+            self.world.byzantineEquivocate = False
         # advance world state
         self.world.step(curr_sim_len)
         # record reward for each agent
@@ -219,9 +222,8 @@ class MultiAgentEnv(gym.Env):
             # Commit Round #
             if self.world.byzantineEquivocate:
                 agent.actionString = 'no_commit'
-
-                ##Reset byzantine equivocate for next rollout
-                self.world.byzantineEquivocate = False
+            elif agent.committed_value != self.params['null_message_val']:
+                agent.actionString = 'commit_'+str(agent.committed_value)
             else:
                 #Get majority value
                 zeroCount = 0

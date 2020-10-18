@@ -89,6 +89,12 @@ class Scenario(BaseScenario):
         if zeroCount >= quorum:
             quorumVal = zeroCount
 
+        #check if committed
+        all_committed = True
+        for agent in world.honest_agents:
+            if agent.committed_value == params['null_message_val']:
+                all_committed = False
+
         for byz_agent in world.byzantine_agents:
             if curr_sim_len%4 == 1:
                 pass
@@ -123,16 +129,20 @@ class Scenario(BaseScenario):
                 elif 1 in comm_values and 0 in comm_values:
                     byz_agent.reward += params['safety_reward']
                     safety_violation = True
+                ## Old sim_done
                 elif (len(set(comm_values)) == 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
                     sim_done = True
+
+                elif all_committed:
+                    sim_done = True 
         
         for agent in world.byzantine_agents:
             reward_list.append(agent.reward)
 
         ## Code for checking if simulation is done -> done when we want to force end after x rounds ##
-        # if curr_sim_len == params['max_round_len']:
-        #     sim_done = True
+        if curr_sim_len == 8:
+            sim_done = True
 
         return sim_done, reward_list, safety_violation
 
