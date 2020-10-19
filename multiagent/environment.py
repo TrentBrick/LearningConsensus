@@ -46,8 +46,15 @@ class MultiAgentEnv(gym.Env):
 
         ##TODO: change if not a byzantine agent
         self.observation_space = spaces.Box(0, 3, (len(self.byzantine_agents[0].state),), dtype=np.uint8)
-        self.leader = self.byzantine_agents[0]
+        
+
+        for agent in self.allAgents:
+            if agent.isLeader:
+                self.leader = agent
+                break
+        # self.leader = self.byzantine_agents[0]
         print("I am: ", self.leader)
+
         # self.observation_space = []
 
         # self.action_space = []
@@ -64,19 +71,22 @@ class MultiAgentEnv(gym.Env):
         done_n = []
         info_n = {'n': []}
 
-        ## Set the leader & view change in round 5
-        if curr_sim_len == 1:
-            self.byzantine_agents[0].isLeader = True
+        ######### View Changes #########
+        ## View Change in round 5
         # if curr_sim_len == 5:
         #     self.byzantine_agents[0].isLeader = False
         #     index = np.random.choice([0,1])
         #     self.leader = self.honest_agents[index]
         #     self.honest_agents[index].isLeader = True
-        if curr_sim_len == 9:
+        if curr_sim_len == 5:
+            # Remove current byzantine leader
             self.byzantine_agents[0].isLeader = False
-            index = np.random.choice([0,1])
+            # Choose an honest leader
+            index = np.random.choice([0,len(self.honest_agents)-1])
             self.leader = self.honest_agents[index]
             self.honest_agents[index].isLeader = True
+
+        ##### View Changes Complete #####
 
         self.scripted_agents = self.world.scripted_agents
         # set action for each agent
@@ -91,12 +101,11 @@ class MultiAgentEnv(gym.Env):
         for agent in self.scripted_agents:
            self._set_scripted_action(agent, curr_sim_len)
             
-        #record if the leader has equivocated
-        if curr_sim_len%4 == 2 and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
+        # Record if the leader has equivocated
+        if (curr_sim_len%4 == 2 or curr_sim_len%4 == 3) and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
             self.world.byzantineEquivocate = True
-            # pass
-        #record if leader hasn't proposed correct value after f+1 status votes
 
+        # Check if Byzantine Agent did not propose correct value
         if self.leader.isByzantine and curr_sim_len == 6: 
             propose_values = []
             for agent in self.scripted_agents:
@@ -127,10 +136,14 @@ class MultiAgentEnv(gym.Env):
 
         #Reset view specific state
         if curr_sim_len%4 == 0:
+            # Reset byzantine equivocate/incorrect propose for next round
+            self.world.byzantineEquivocate = False
+            self.world.byzantineIncorrectPropose = False
             for agent in self.allAgents:
                 agent.status_values = []
                 agent.proposeValue = self.params['null_message_val']
                 agent.statusValue = self.params['null_message_val']
+                agent.notifyValue = self.params['null_message_val']
 
         return obs_n, reward_n, done_n, info_n, sim_done, safety_violation
 
@@ -216,17 +229,31 @@ class MultiAgentEnv(gym.Env):
         if curr_sim_len%4 == 2:
             # Propose Round #
             if agent.isLeader:
-                if agent.statusValue == self.params['null_message_val']:
-                    agent.proposeValue = np.random.choice([0,1])
-                    agent.actionString = 'send_to-all_'+str(agent.proposeValue)
-                else:
+                ## Figure out if f+1 status votes (including yourself) for a single value
+                oneVote = 0
+                zeroVote = 0
+                for honest_agent in self.honest_agents:
+                    if honest_agent.committed_value == 0 or honest_agent.notifyValue == 0:
+                        zeroVote += 1
+                    elif honest_agent.committed_value == 1 or honest_agent.notifyValue == 1:
+                        oneVote += 1
+                if oneVote >= 2:
+                    agent.statusValue = 1
+                elif zeroVote >= 2:
+                    agent.statusValue = 0
+
+                if agent.statusValue != self.params['null_message_val']:
                     agent.proposeValue = agent.statusValue
                     agent.actionString = 'send_to-all_'+str(agent.proposeValue)
+                elif agent.committed_value != self.params['null_message_val']:
+                    agent.proposeValue = agent.committed_value
+                    agent.actionString = 'send_to-all_'+str(agent.proposeValue)
+                else:
+                    agent.proposeValue = np.random.choice([0,1])
+                    agent.actionString = 'send_to-all_'+str(agent.proposeValue)
+
             else:
                 agent.actionString = 'pass'
-
-            # Reset notify value from previous round#
-            agent.notifyValue = self.params['null_message_val']
 
         if curr_sim_len%4 == 3:
             # Vote Round #
@@ -239,15 +266,17 @@ class MultiAgentEnv(gym.Env):
 
         if curr_sim_len%4 == 0:
             # Commit Round #
-            if self.world.byzantineEquivocate or self.world.byzantineIncorrectPropose: 
+            
+            if agent.committed_value != self.params['null_message_val']:
+                agent.actionString = 'commit_'+str(agent.committed_value)
+
+            elif self.world.byzantineEquivocate or self.world.byzantineIncorrectPropose: 
                 agent.actionString = 'no_commit'
                 if self.world.byzantineIncorrectPropose:
-                    print("byzantine incorrect propose")
+                    # print("byzantine incorrect propose")
+                    pass 
 
-
-                self.world.byzantineEquivocate = False
-                self.world.byzantineIncorrectPropose = False
-            if not self.world.byzantineEquivocate and not self.world.byzantineIncorrectPropose:
+            elif not self.world.byzantineEquivocate and not self.world.byzantineIncorrectPropose:
                 #Get majority value
                 zeroCount = 0
                 oneCount = 0

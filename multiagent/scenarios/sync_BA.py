@@ -77,6 +77,12 @@ class Scenario(BaseScenario):
         if zeroCount >= quorum:
             quorumVal = zeroCount
 
+        #check if committed
+        all_committed = True
+        for agent in world.honest_agents:
+            if agent.committed_value == params['null_message_val']:
+                all_committed = False
+
         for byz_agent in world.byzantine_agents:
             if curr_sim_len%4 == 1:
                 pass
@@ -85,7 +91,7 @@ class Scenario(BaseScenario):
                 # Agent received f+1 statuses for a single value and must propose that value
                 if byz_agent.isLeader:
                     if quorumVal != False:
-                        if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString or ('v-') + str(q-quorumVal) in byz_agent.actionString:
+                        if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString or ('v-') + str(1-quorumVal) in byz_agent.actionString:
                             byz_agent.reward += params['equivocation_penalty']*2
                             world.byzantineIncorrectPropose = True
                 # byz_agent.reward += params['first_round_reward']
@@ -115,6 +121,8 @@ class Scenario(BaseScenario):
                 elif (len(set(comm_values)) == 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
                     sim_done = True
+            if all_committed:
+                sim_done = True
         
         for agent in world.byzantine_agents:
             reward_list.append(agent.reward)
