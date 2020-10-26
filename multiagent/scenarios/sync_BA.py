@@ -92,11 +92,12 @@ class Scenario(BaseScenario):
                 if byz_agent.isLeader:
                     if quorumVal != False:
                         if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString or ('v-') + str(1-quorumVal) in byz_agent.actionString:
-                            byz_agent.reward += params['equivocation_penalty']*2
+                            # byz_agent.reward += params['equivocation_penalty']*2
                             world.byzantineIncorrectPropose = True
                 # byz_agent.reward += params['first_round_reward']
                 if world.byzantineEquivocate:
-                    byz_agent.reward += params['equivocation_penalty']
+                    # byz_agent.reward += params['equivocation_penalty']
+                    pass
             if curr_sim_len%4 == 3:
                 if world.byzantineEquivocate:
                     # byz_agent.reward += params['equivocation_penalty']

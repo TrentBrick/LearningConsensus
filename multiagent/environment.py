@@ -244,7 +244,8 @@ class MultiAgentEnv(gym.Env):
 
                 if agent.statusValue != self.params['null_message_val']:
                     agent.proposeValue = agent.statusValue
-                    agent.actionString = 'send_to-all_'+str(agent.proposeValue)
+                    agent.actionString = 'send_to-all_'+str(agent.proposeValue) 
+                    ## (PROPOSE, value-0, signature, certificate, receiver) ##
                 elif agent.committed_value != self.params['null_message_val']:
                     agent.proposeValue = agent.committed_value
                     agent.actionString = 'send_to-all_'+str(agent.proposeValue)
