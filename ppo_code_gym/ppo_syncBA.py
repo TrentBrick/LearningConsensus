@@ -96,8 +96,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp81-syncBA-notify-noequiv")
-    logger.save_config(locals())
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp82-syncBA-notify-noEquiv")
+    # logger.save_config(locals())
 
     # Random seed
     seed += 10000 * proc_id()
@@ -215,7 +215,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             v_list = []
             logp_list = []
             for i, agent in enumerate(env.agents):
-                if agent.committed_value != params['null_message_val']:
+                if agent.committedValue != params['null_message_val']:
                     a, logp, v = agent.actionIndex, None, None
                 else:
                     a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
@@ -230,12 +230,12 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                     continue
                 agentActionString =  agent.actionSpace[actions_list[ind]]
                 if 'commit' in agentActionString:
-                    agent.committed_value = int(agentActionString.split('_')[1])
+                    agent.committedValue = int(agentActionString.split('_')[1])
                 
-                if agent.committed_value == params['null_message_val']:
+                if agent.committedValue == params['null_message_val']:
                     buf.store(0, o_list[ind], actions_list[ind], v_list[ind], logp_list[ind])
 
-                elif agent.committed_value != params['null_message_val'] and len(agent.last_action_etc.keys()) == 0:
+                elif agent.committedValue != params['null_message_val'] and len(agent.last_action_etc.keys()) == 0:
                     pass 
             
             next_o, r_list, d_list, info_n_list, sim_done, safety_violation = env.step(actions_list, v_list, logp_list, round_len)
@@ -249,7 +249,11 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
             #Log in trajectory
             for agent in env.allAgents:
-                single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actionString, agent.status_values, agent.statusValue, agent.proposeValue))
+                if not agent.isByzantine:
+                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.action))
+                else:
+                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actions))
+
            
            ## Print out safety violation
             if safety_violation:
@@ -285,7 +289,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 comm_values = []
 
                 for agent in env.honest_agents:
-                    comm_values.append(agent.committed_value)
+                    comm_values.append(agent.committedValue)
 
                 if sim_done and round_len <= 5:
                     honest_wins+=1

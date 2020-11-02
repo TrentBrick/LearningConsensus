@@ -74,7 +74,7 @@ class Byzantine_Agent:
         self.committed_value = False
 
         self.actionIndex = None
-        self.actionString = ""
+        self.action = ""
 
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy

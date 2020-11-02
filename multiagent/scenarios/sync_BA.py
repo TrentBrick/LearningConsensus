@@ -80,7 +80,7 @@ class Scenario(BaseScenario):
         #check if committed
         all_committed = True
         for agent in world.honest_agents:
-            if agent.committed_value == params['null_message_val']:
+            if agent.committedValue == params['null_message_val']:
                 all_committed = False
 
         for byz_agent in world.byzantine_agents:
@@ -110,7 +110,7 @@ class Scenario(BaseScenario):
             if curr_sim_len%4 == 0:
                 comm_values = []
                 for agent in world.honest_agents:
-                    comm_values.append(agent.committed_value)
+                    comm_values.append(agent.committedValue)
                 #If one agent has committed and the other hasn't, give a reward
                 if (2 in comm_values) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
@@ -138,7 +138,7 @@ class Scenario(BaseScenario):
         return agent.state
 
     def is_done(self, agent):
-        return agent.committed_value != 2
+        return agent.committedValue != 2
 
     def getMajority(self, agents):
         starting_values = []
