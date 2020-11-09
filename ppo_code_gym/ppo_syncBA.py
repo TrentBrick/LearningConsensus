@@ -96,8 +96,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp82-syncBA-notify-noEquiv")
-    # logger.save_config(locals())
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp83-syncBA-noEquiv-full")
+    logger.save_config(locals())
 
     # Random seed
     seed += 10000 * proc_id()
@@ -210,6 +210,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         safetyViolations = 0
         same_action = 0
         byzantine_action_dic = dict()
+        currSimSafetyViolation = False
         for t in range(local_steps_per_epoch):
             actions_list = []
             v_list = []
@@ -219,6 +220,12 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                     a, logp, v = agent.actionIndex, None, None
                 else:
                     a, v, logp = ac.step(torch.as_tensor(o_list[i], dtype=torch.float32))
+                    # if round_len == 1:
+                    #     print("obs are: ", o_list[i])
+                    #     print("a is: ", a)
+                    #     print("v is: ", v)
+                    #     print("logp is: ", logp)
+                    
 
                 actions_list.append(a)
                 v_list.append(v)
@@ -257,6 +264,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
            
            ## Print out safety violation
             if safety_violation:
+                currSimSafetyViolation = True
                 safetyViolations+=1
                 
 
@@ -291,9 +299,9 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 for agent in env.honest_agents:
                     comm_values.append(agent.committedValue)
 
-                if sim_done and round_len <= 5:
+                if sim_done and round_len <= 5 and not currSimSafetyViolation:
                     honest_wins+=1
-                if sim_done and round_len > 5:
+                if (sim_done and round_len > 5) or currSimSafetyViolation:
                     byzantine_wins+=1
                 # if len(set(comm_values)) is 1:
                 #     honest_wins+=1
@@ -326,6 +334,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 o_list, byzantine_ep_ret, ep_len = env.reset(), 0, 0
                 rounds+= round_len
                 round_len = 0
+                currSimSafetyViolation = False
                 prev_ep_trajectory_log = curr_ep_trajectory_log[:]
                 curr_ep_trajectory_log.append(single_run_trajectory_log)
                 single_run_trajectory_log = setup_trajectory_log(env.allAgents)

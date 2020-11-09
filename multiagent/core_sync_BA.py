@@ -182,6 +182,9 @@ class Message(object):
     def __cmp__(self, other):
         return self.iteration < other.iteration
 
+    def __repr__(self):
+        return str(self)
+
 class MessageType(Enum):
     STATUS = 1
     PROPOSE = 2
@@ -206,6 +209,9 @@ class Accepted(object):
 
     def __cmp__(self, other):
         return self.iteration < other.iteration
+    
+    def __repr__(self):
+        return str(self)
     
 #multi-agent world
 class World(object):
@@ -247,12 +253,11 @@ class World(object):
         if agent.isByzantine:
                 for sending_agent in agent_list:
                     if not sending_agent.isByzantine:
-                        if 'BROADCAST' in sending_agent.action.receiver or 'agent-'+str(agent.agentId) in sending_agent.action.receiver and sending_agent.action.messageType != MessageType.NOSEND:
+                        if ('BROADCAST' == sending_agent.action.receiver or agent.agentId == sending_agent.action.receiver) and sending_agent.action.messageType != MessageType.NOSEND:
                             heapq.heappush(agent.messages, sending_agent.action)
                     else:
                         for act in agent.actions:
                             heapq.heappush(agent.messages, act)
-
 
         if curr_sim_len%4 == 1:
             #Only need to update the leader's state
@@ -268,7 +273,7 @@ class World(object):
                         else:
                             agent.statusValues.append(actor.action.value)
                             agent.roundMessages.append(actor.action)
-                        pass
+                        continue
                     if actor.isByzantine:
                         byzMessage = self.byzantine_round_message(agent, actor)
                         agent.roundMessages.append(byzMessage)
@@ -304,11 +309,12 @@ class World(object):
 
         if curr_sim_len%4 == 2:
             # Leader's state remains the same because the leader is proposing - only update proposeValue
+            equiv = False
             if agent.isLeader: 
                 new_state = old_state
-                new_state[0] = agent.proposal.value
+                new_state[0] = agent.proposal.value if agent.proposal != self.params['null_message_val'] else self.params['null_message_val']
             # Non leaders must update their propose value
-            else:
+            else:                
                 for actor in agent_list:
                     # If the agent is itself, ignore
                     if agent.agentId == actor.agentId:
@@ -328,7 +334,11 @@ class World(object):
             #In vote round, everyone's state is updated
             for actor in agent_list:
                 if agent.agentId == actor.agentId:
-                    agent.roundMessages.append(actor.action)
+                    if agent.isByzantine:
+                        for action in agent.actions:
+                            agent.roundMessages.append(action)
+                    else:
+                        agent.roundMessages.append(actor.action)
                     continue
                 if actor.isByzantine:
                     new_state.append(self.byzantine_action_result(agent, actor))
@@ -382,7 +392,6 @@ class World(object):
                 new_state.append(0)
             ## Check action possibilities 
             self.get_action_possibilities(agent, agent_list, iteration, curr_sim_len)
-            new_state.pop()
             for key, val in agent.actionDict.items():
                 if len(val) == 0: #Action isn't possible
                     new_state.append(1)
@@ -416,6 +425,7 @@ class World(object):
                 else:
                     new_state.append(0)
         
+        
 
 
         # print(new_state)
@@ -424,24 +434,24 @@ class World(object):
     def byzantine_action_result(self, agent, byzantineAgent):
         sentMessage = False
         for byzantineAction in byzantineAgent.actions:
-            if 'BROADCAST' in byzantineAction.receiver or 'agent-'+str(agent.agentId) in byzantineAction.receiver and byzantineAction.messageType != MessageType.NOSEND:
+            if 'BROADCAST' == byzantineAction.receiver or agent.agentId == byzantineAction.receiver and byzantineAction.messageType != MessageType.NOSEND:
                 return byzantineAction.value
-        return params['null_message_val']
+        return self.params['null_message_val']
     
     def byzantine_round_message(self, agent, byzantineAgent):
         sentMessage = False
         for byzantineAction in byzantineAgent.actions:
-            if 'BROADCAST' in byzantineAction.receiver or 'agent-'+str(agent.agentId) in byzantineAction.receiver and byzantineAction.messageType != MessageType.NOSEND:
+            if 'BROADCAST' == byzantineAction.receiver or agent.agentId == byzantineAction.receiver and byzantineAction.messageType != MessageType.NOSEND:
                 return byzantineAction
         return Message(MessageType.NOSEND)
 
     def get_action_possibilities(self, agent, agent_list, iteration, curr_sim_len):
-        self.actionDict = dict.fromkeys(agent.actionSpace)
-        for key in self.actionDict:
-            self.actionDict[key] = []
-        self.actionDict['no_send'].append(Message(MessageType.NOSEND))
+        agent.actionDict = dict.fromkeys(agent.actionSpace)
+        for key in agent.actionDict:
+            agent.actionDict[key] = []
+        agent.actionDict['no_send'].append(Message(MessageType.NOSEND))
         if agent.isLeader:
-            if curr_sim_len%4 == 2:
+            if curr_sim_len%4 == 1:
                 ## Can basically propose any value here 
                 for action in agent.actionSpace:
                     if action == 'no_send':
@@ -449,25 +459,26 @@ class World(object):
                     for receiving_agent in agent_list:
                         receiver_id = receiving_agent.agentId
                         if 'agent-' + str(receiver_id) in action:
-                            value = action.split('agent-'+str(receiver_id)+'_v-')[-1][0]
-                            self.actionDict[action].append(Message(MessageType.PROPOSE, value, iteration, params['null_message_val'],
+                            value = int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+                            agent.actionDict[action].append(Message(MessageType.PROPOSE, value, iteration, self.params['null_message_val'],
                                 agent.agentId, receiver_id))
-                    
-            if curr_sim_len%4 == 3:
+            if curr_sim_len%4 == 2:
                 for action in agent.actionSpace:
+                    if action == 'no_send':
+                        pass
                     for receiving_agent in agent_list:
                         receiver_id = receiving_agent.agentId
                         if 'agent-' + str(receiver_id) in action:
-                            value = action.split('agent-'+str(receiver_id)+'_v-')[-1][0]
-                            for proposeMessage in agent.prevAction:
+                            value = int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+                            for proposeMessage in agent.actions:
                                 if proposeMessage.value == value:
-                                    self.actionDict[action].append(Message(MessageType.VOTE, value, proposeMessage.iteration, proposeMessage,
+                                    agent.actionDict[action].append(Message(MessageType.VOTE, value, proposeMessage.iteration, proposeMessage,
                                         agent.agentId, receiver_id))
-                                    break
-
         else:
             for action in agent.actionSpace:
-                self.actionDict[action].append(Message(MessageType.NOSEND))
+                if action == 'no_send':
+                    pass
+                agent.actionDict[action].append(Message(MessageType.NOSEND))
 
 
 

@@ -3,7 +3,7 @@ import collections
 import heapq
 class Message(object):
 
-    def __init__(self, value=None, iteration=None, signature=None, certificate=None, sender=None, receiver='BROADCAST'):
+    def __init__(self, MessageType, value=None, iteration=None, certificate=None, sender=None, receiver='BROADCAST'):
         self.messageType = MessageType
         self.value = value
         self.iteration = iteration
@@ -21,6 +21,9 @@ class Message(object):
     def __cmp__(self, other):
         return self.iteration < other.iteration
 
+    def __repr__(self):
+        return str(self)
+
 class MessageType(Enum):
     STATUS = 1
     PROPOSE = 2
@@ -30,8 +33,8 @@ class MessageType(Enum):
 
 
 if __name__ == "__main__":
-    # m1 = Message(MessageType.STATUS, "value-0", -5, "sig", "cert", "agent-0", "agent-1")
-    # m2 = Message(MessageType.STATUS, "value-0", 6, "sig", "cert", "agent-0", "agent-1")
+    m1 = Message(MessageType.STATUS, "value-0", -5, "cert", "agent-0", "agent-1")
+    m2 = Message(MessageType.STATUS, "value-0", 6,  "cert", "agent-0", "agent-1")
     # m3 = Message(MessageType.STATUS, "value-0", 25, "sig", "cert", "agent-0", "agent-1")
     # messages = []
     # heapq.heappush(messages, m1)
@@ -41,14 +44,16 @@ if __name__ == "__main__":
 #     m1 = Message()
 
 #     print(m1)
-
-    actions = [1,2,3]
-    empty_dict = dict.fromkeys(actions)
-    for key in empty_dict:
-        empty_dict[key] = []
-    for key in empty_dict:
-        empty_dict[key].append(5)
-    print(empty_dict)
+    state = [1,2,3]
+    log = dict()
+    log["m"] = []
+    log["m"].append((state, m1))
+    print(log)
+    # var = []
+    # print(m1)
+    # var.append(m1)
+    # var.append(m2)
+    # print(var)
     # actionStr = 'send_agent-1_v-2_agent-3_v-0'
     # receiver_id = 1
     # if 'agent-' + str(receiver_id) in actionStr:

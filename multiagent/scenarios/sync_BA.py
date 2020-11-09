@@ -82,6 +82,7 @@ class Scenario(BaseScenario):
         for agent in world.honest_agents:
             if agent.committedValue == params['null_message_val']:
                 all_committed = False
+                break
 
         for byz_agent in world.byzantine_agents:
             if curr_sim_len%4 == 1:
@@ -93,7 +94,8 @@ class Scenario(BaseScenario):
                     if quorumVal != False:
                         if 'v-0' and 'v-1' in byz_agent.actionString or ('v-' + str(quorumVal)) not in byz_agent.actionString or ('v-') + str(1-quorumVal) in byz_agent.actionString:
                             # byz_agent.reward += params['equivocation_penalty']*2
-                            world.byzantineIncorrectPropose = True
+                            # world.byzantineIncorrectPropose = True
+                            pass
                 # byz_agent.reward += params['first_round_reward']
                 if world.byzantineEquivocate:
                     # byz_agent.reward += params['equivocation_penalty']

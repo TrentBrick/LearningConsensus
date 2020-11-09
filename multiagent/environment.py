@@ -98,7 +98,7 @@ class MultiAgentEnv(gym.Env):
         self.scripted_agents = self.world.scripted_agents
         # set action for each agent
         for ind, agent in enumerate(self.agents): # Agents controlled by neural network 
-            self._set_action(action_n[ind], agent)
+            self._set_action(action_n[ind], agent, curr_sim_len)
             if agent.committedValue != self.params['null_message_val'] and len(agent.last_action_etc.keys())==0: # agent has committed and it has only just committed!! ie it doesnt have any dictoinary values yet. 
                 agent.last_action_etc['obs'] = agent.state
                 agent.last_action_etc['act'] = action_n[ind]
@@ -107,10 +107,11 @@ class MultiAgentEnv(gym.Env):
         
         for agent in self.scripted_agents: #Scripted agent
            self._set_scripted_action(agent, curr_sim_len)
-            
+
         # Record if the leader has equivocated
         if (curr_sim_len%4 == 2 or curr_sim_len%4 == 3) and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
-            self.world.byzantineEquivocate = True
+            # self.world.byzantineEquivocate = True
+            pass
 
         # Check if Byzantine Agent did not propose correct value
         if self.leader.isByzantine and curr_sim_len == 6: 
@@ -207,26 +208,28 @@ class MultiAgentEnv(gym.Env):
         return self.reward_callback(self.params, curr_sim_len, self.world)
 
     # set env action for a particular agent - this still needs to be configured
-    def _set_action(self, action_index, agent):
+    def _set_action(self, action_index, agent, curr_sim_len):
+        if len(agent.actionDict['no_send']) > 1:
+            del agent.actionDict['no_send'][-1] 
         agent.prevAction = agent.actions
         agent.prevActionString = agent.actionString
         agent.actionIndex = action_index
         agent.actionString = agent.actionSpace[action_index]
         agent.actions = agent.actionDict[agent.actionString]
-        
-        ###If commit in agents action space, then commit
-        # if 'commit' in agent.action:
-        #     agent.committedValue = int(agent.actionString.split('_')[1])
+        # if curr_sim_len == 0:
+        #         print("actionIndex: ", action_index)
+        #         print("actionString: ", agent.actionString)
+        #         print("actions: ", agent.actions)
     
     def _set_scripted_action(self, agent, curr_sim_len):
         if curr_sim_len%4 == 1:
             # Notify
-            if agent.committedValue == self.params['null_message_val']:
-                for committed_agent in self.scripted_agents:
-                    if committed_agent.agentId == agent.agentId:
-                        pass
-                    if committed_agent.committedValue != self.params['null_message_val']:
-                        agent.accepted = committed_agent.accepted
+            # if agent.committedValue == self.params['null_message_val']:
+            #     for committed_agent in self.scripted_agents:
+            #         if committed_agent.agentId == agent.agentId:
+            #             pass
+            #         if committed_agent.committedValue != self.params['null_message_val']:
+            #             agent.accepted = committed_agent.accepted
 
             # Status round #
             ### New Code ###
@@ -238,66 +241,26 @@ class MultiAgentEnv(gym.Env):
                 agent.action = Message(MessageType.NOSEND)
                 agent.roundValue = self.params['null_message_val']
 
-                ### Old Code ###
-                # if agent.committed_value != self.params['null_message_val']:
-                #     agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.committed_value)
-                #     agent.roundValue = agent.committed_value
-                # elif agent.notifyValue != self.params['null_message_val']:
-                #     agent.actionString = 'send_agent-'+str(self.leader.agentId)+ '_v-' + str(agent.notifyValue)
-                #     agent.roundValue = agent.notifyValue
-                # else:
-                #     agent.actionString = 'pass'
-                #     agent.roundValue = self.params['null_message_val']
-
         if curr_sim_len%4 == 2:
             # Propose Round #
             #### New Code ####
             if agent.isLeader:
                 # Choose accepted value
-                if agent.accepted.value != params['null_message_val']:
+                if agent.accepted.value != self.params['null_message_val']:
                     proposeValue = agent.accepted.value
                     certificate = agent.accepted.certificate
                     iteration = agent.accepted.iteration
                 # Choose proposal freely
                 else:
                     proposeValue = np.random.choice([0,1])
-                    certificate = params['null_message_val']
+                    certificate = self.params['null_message_val']
                     iteration = self.iteration 
-                
                 # Broadcast proposal
                 agent.action = Message(MessageType.PROPOSE, proposeValue, iteration,
                     certificate, agent.agentId, "BROADCAST")
+                agent.proposal = agent.action
             else:
                 agent.action = Message(MessageType.NOSEND)
-
-            #### Old Code ####
-            # if agent.isLeader:
-            #     ## Figure out if f+1 status votes (including yourself) for a single value
-            #     oneVote = 0
-            #     zeroVote = 0
-            #     for honest_agent in self.honest_agents:
-            #         if honest_agent.committed_value == 0 or honest_agent.notifyValue == 0:
-            #             zeroVote += 1
-            #         elif honest_agent.committed_value == 1 or honest_agent.notifyValue == 1:
-            #             oneVote += 1
-            #     if oneVote >= 2:
-            #         agent.statusValue = 1
-            #     elif zeroVote >= 2:
-            #         agent.statusValue = 0
-
-            #     if agent.statusValue != self.params['null_message_val']:
-            #         agent.proposeValue = agent.statusValue
-            #         agent.actionString = 'send_to-all_'+str(agent.proposeValue) 
-            #         ## (PROPOSE, value-0, signature, certificate, receiver) ##
-            #     elif agent.committed_value != self.params['null_message_val']:
-            #         agent.proposeValue = agent.committed_value
-            #         agent.actionString = 'send_to-all_'+str(agent.proposeValue)
-            #     else:
-            #         agent.proposeValue = np.random.choice([0,1])
-            #         agent.actionString = 'send_to-all_'+str(agent.proposeValue)
-
-            # else:
-            #     agent.action = 'pass'
 
         if curr_sim_len%4 == 3:
             # Vote Round #
@@ -308,14 +271,6 @@ class MultiAgentEnv(gym.Env):
             else:
                 agent.action = Message(MessageType.NOSEND)
 
-            #### Old Code ####
-            # if agent.proposeValue != self.params['null_message_val']:
-            #     agent.actionString = 'send_to-all_' + str(agent.proposeValue)
-            #     agent.roundValue = agent.proposeValue
-            # # Agent will not vote for anything becuase it hasn't been proposed a value
-            # else:
-            #     agent.actionString = 'pass'
-
         if curr_sim_len%4 == 0:
             # Commit Round #
             agent.accepted = Accepted() # Reset accepted value
@@ -323,10 +278,10 @@ class MultiAgentEnv(gym.Env):
             if agent.committedValue != self.params['null_message_val']:
                 # agent.commitMessage.iteration = iteration
                 agent.action = agent.commitMessage
-                agent.accepted = Accepted(agent.commitMessage.value, agent.commitMessage.iteration, agent.commitmessage.certificate)
+                agent.accepted = Accepted(agent.commitMessage.value, agent.commitMessage.iteration, agent.commitMessage.certificate)
 
-            elif self.world.byzantineEquivocate or self.world.byzantineIncorrectPropose: 
-                agent.action = Message(MessageType.NOCOMMIT)
+            # elif self.world.byzantineEquivocate or self.world.byzantineIncorrectPropose: 
+            #     agent.action = Message(MessageType.NOCOMMIT)
 
             elif not self.world.byzantineEquivocate and not self.world.byzantineIncorrectPropose:
                 zeroCount = 0
@@ -344,40 +299,16 @@ class MultiAgentEnv(gym.Env):
                     certificate = []
                     for message in agent.roundMessages:
                         if message.value == agent.committedValue:
-                            certificate.add(message)
+                            certificate.append(message)
                     
                     agent.action = Message(MessageType.COMMIT, agent.committedValue, self.iteration, 
                         certificate, agent.agentId, "BROADCAST")                    
                     agent.commitMessage = agent.action
-                    agent.accepted = Accepted(agent.commitMessage.value, agent.commitMessage.iteration, agent.commitmessage.certificate)
+                    agent.accepted = Accepted(agent.commitMessage.value, agent.commitMessage.iteration, agent.commitMessage.certificate)
 
                 else:
                     agent.action = Message(MessageType.NOCOMMIT)
                     agent.roundValue = self.params['null_message_val']                    
-
-
-                #### Old Code ####
-                #Get majority value
-                # zeroCount = 0
-                # oneCount = 0
-                # for val in agent.state:
-                #     if int(val) == 0:
-                #         zeroCount+=1
-                #     if int(val) == 1:
-                #         oneCount+=1
-                # # Update agent commit value
-                # quorum = (self.params['num_agents']+1)/2
-                # if zeroCount >= quorum:
-                #     agent.actionString = 'commit_0'
-                #     agent.committed_value = 0
-                #     agent.roundValue = agent.committed_value
-                # elif oneCount >= quorum:
-                #     agent.actionString = 'commit_1'
-                #     agent.committed_value = 1
-                #     agent.roundValue = agent.committed_value
-                # else:
-                #     agent.actionString = 'no_commit'
-                #     agent.roundValue = self.params['null_message_val']
         
 
 
