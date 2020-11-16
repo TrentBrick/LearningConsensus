@@ -110,8 +110,8 @@ class MultiAgentEnv(gym.Env):
 
         # Record if the leader has equivocated
         if (curr_sim_len%4 == 2 or curr_sim_len%4 == 3) and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
-            # self.world.byzantineEquivocate = True
-            pass
+            self.world.byzantineEquivocate = True
+            # pass
 
         # Check if Byzantine Agent did not propose correct value
         if self.leader.isByzantine and curr_sim_len == 6: 
@@ -224,12 +224,12 @@ class MultiAgentEnv(gym.Env):
     def _set_scripted_action(self, agent, curr_sim_len):
         if curr_sim_len%4 == 1:
             # Notify
-            # if agent.committedValue == self.params['null_message_val']:
-            #     for committed_agent in self.scripted_agents:
-            #         if committed_agent.agentId == agent.agentId:
-            #             pass
-            #         if committed_agent.committedValue != self.params['null_message_val']:
-            #             agent.accepted = committed_agent.accepted
+            if agent.committedValue == self.params['null_message_val']:
+                for committed_agent in self.scripted_agents:
+                    if committed_agent.agentId == agent.agentId:
+                        pass
+                    if committed_agent.committedValue != self.params['null_message_val']:
+                        agent.accepted = committed_agent.accepted
 
             # Status round #
             ### New Code ###
