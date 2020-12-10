@@ -50,7 +50,7 @@ class Honest_Agent:
 
 class Byzantine_Agent:
 
-    def __init__(self, params, agentId, give_inits, byzantine_inds):
+    def __init__(self, params, agentId, give_inits, byzantine_inds, is_leader):
         self.isByzantine = True
         self.agentId = agentId
         self.actionSpace = self.getByzantineActionSpace(params, byzantine_inds)
@@ -58,6 +58,7 @@ class Byzantine_Agent:
         self.stateDims = len(params['commit_vals'])+1 # +1 for the null value. 
         self.committed_ptr =  False
         self.reward = 0
+        self.isLeader = is_leader
 
         # Initialize action possibilities
         self.actionDict = dict.fromkeys(self.actionSpace)
@@ -87,8 +88,6 @@ class Byzantine_Agent:
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = None
-        self.isLeader = True
-
         state = self.initAgentState(params, give_inits)
         if self.isLeader:
             state.append(1)
@@ -97,7 +96,7 @@ class Byzantine_Agent:
 
         ### We don't want the agent to send anything in the FIRST status round, so zero out everything but no_send ###
         state.append(0)
-        state = (state + [1]*8)
+        state = (state + [1]*70)
 
         # # 2 actions where send something different
         # state = (state + [0]*5)
@@ -127,11 +126,14 @@ class Byzantine_Agent:
     def getByzantineActionSpace(self, params, byzantine_inds):
         action_space = []
         action_space.append('no_send')
-         # remove the byz agents.
+         # remove only yourself.
         non_byzantines = list(range(0, params['num_agents']))
-        for byzantine_ind in byzantine_inds:
-            if byzantine_ind in non_byzantines:
-                non_byzantines.remove(byzantine_ind)
+        for agent_ind in non_byzantines:
+            if agent_ind == self.agentId:
+                non_byzantines.remove(agent_ind)
+        # for byzantine_ind in byzantine_inds:
+        #     if byzantine_ind in non_byzantines:
+        #         non_byzantines.remove(byzantine_ind)
 
         # Get all combinations of the honest agents to send to
         # and then interleave in all permutations of the values that can be sent to them.
@@ -394,7 +396,9 @@ class World(object):
             self.get_action_possibilities(agent, agent_list, iteration, curr_sim_len)
             for key, val in agent.actionDict.items():
                 if len(val) == 0: #Action isn't possible
-                    new_state.append(1)
+                    # new_state.append(1)
+                    agent.actionDict[key].append(Message(MessageType.NOSEND))
+                    new_state.append(0)
                 else:
                     new_state.append(0)
 
@@ -421,7 +425,9 @@ class World(object):
             self.get_action_possibilities(agent, agent_list, iteration, curr_sim_len)
             for key, val in agent.actionDict.items():
                 if len(val) == 0: #Action isn't possible
-                    new_state.append(1)
+                    # new_state.append(1)
+                    agent.actionDict[key].append(Message(MessageType.NOSEND))
+                    new_state.append(0)
                 else:
                     new_state.append(0)
         
@@ -453,15 +459,62 @@ class World(object):
         if agent.isLeader:
             if curr_sim_len%4 == 1:
                 ## Can basically propose any value here 
-                for action in agent.actionSpace:
-                    if action == 'no_send':
-                        pass
-                    for receiving_agent in agent_list:
-                        receiver_id = receiving_agent.agentId
-                        if 'agent-' + str(receiver_id) in action:
-                            value = int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
-                            agent.actionDict[action].append(Message(MessageType.PROPOSE, value, iteration, self.params['null_message_val'],
-                                agent.agentId, receiver_id))
+                if curr_sim_len == 1:
+                    for action in agent.actionSpace:
+                        if action == 'no_send':
+                            pass
+                        for receiving_agent in agent_list:
+                            receiver_id = receiving_agent.agentId
+                            if 'agent-' + str(receiver_id) in action:
+                                value = int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+                                agent.actionDict[action].append(Message(MessageType.PROPOSE, value, iteration, self.params['null_message_val'],
+                                    agent.agentId, receiver_id))
+                else:
+                    ### Find if there are f+1 status votes for same value
+                    status_values = []
+                    for honest_agent in self.honest_agents:
+                        status_values.append(honest_agent.action.value)
+                    quorum = (self.params['num_agents']+1)/2
+                    oneCount = 0
+                    zeroCount = 0
+                    for val in status_values:
+                        if val == 1:
+                            oneCount+=1
+                        if val == 0:
+                            zeroCount+=0
+                    if oneCount >= quorum or zeroCount >= quorum:
+                        certificate = self.honest_agents[0].action
+                        ## Agent must propose value received f+1 status votes for
+                        value = 1 if oneCount >= quorum else 0
+                        #TODO: instead of looping through all actions, just manually create actionstring and find index 
+                        for action in agent.actionSpace:
+                            doAction = True
+                            if action == 'no_send':
+                                pass
+                            for receiving_agent in agent_list:
+                                if receiving_agent.agentId == agent.agentId:
+                                    continue
+                                if 'agent-'+str(receiving_agent.agentId) not in action or 'v-'+str(value-1) in action:
+                                    doAction = False
+                            if doAction:
+                                for receiving_agent in agent_list:
+                                    receiver_id = receiving_agent.agentId
+                                    if 'agent-' + str(receiver_id) in action:
+                                        agent.actionDict[action].append(Message(MessageType.PROPOSE, value, iteration, certificate,
+                                            agent.agentId, receiver_id))
+                            
+                    else:
+                        ## Agent can go and propose anything
+                        for action in agent.actionSpace:
+                            if action == 'no_send':
+                                pass
+                            for receiving_agent in agent_list:
+                                receiver_id = receiving_agent.agentId
+                                if 'agent-' + str(receiver_id) in action:
+                                    value = int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+                                    agent.actionDict[action].append(Message(MessageType.PROPOSE, value, iteration, self.params['null_message_val'],
+                                        agent.agentId, receiver_id))
+
             if curr_sim_len%4 == 2:
                 for action in agent.actionSpace:
                     if action == 'no_send':
@@ -475,6 +528,21 @@ class World(object):
                                     agent.actionDict[action].append(Message(MessageType.VOTE, value, proposeMessage.iteration, proposeMessage,
                                         agent.agentId, receiver_id))
         else:
+            if curr_sim_len%4 == 1:
+                ## Can't propose anything - not leader
+                pass
+            if curr_sim_len%4 == 2:
+                ## Can only vote for what was sent by byzantine leader
+                for action in agent.actionSpace:
+                    if action == 'no_send':
+                        pass
+                    for receiving_agent in agent_list:
+                        receiver_id = receiving_agent.agentId
+                        if 'agent-' + str(receiver_id) in action:
+                            value = int(action.split('agent-'+str(receiver_id)+'_v-')[-1][0])
+                            if agent.proposal.value == value:
+                                agent.actionDict[action].append(Message(MessageType.VOTE, value, agent.proposal.iteration, agent.proposal,
+                                    agent.agentId, receiver_id))
             for action in agent.actionSpace:
                 if action == 'no_send':
                     pass

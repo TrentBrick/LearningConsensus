@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp82-syncBA-notify")
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp99-syncBA-5Agents-notify-noEquiv-Termination")
     logger.save_config(locals())
 
     # Random seed
@@ -208,9 +208,13 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         byzantine_wins = 0
         rounds = 0
         safetyViolations = 0
+        delayTerminations = 0
+        violateBoth = 0
         same_action = 0
         byzantine_action_dic = dict()
         currSimSafetyViolation = False
+        currSimDelayTermination = False
+        currSimBothViolate = False
         for t in range(local_steps_per_epoch):
             actions_list = []
             v_list = []
@@ -245,7 +249,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 elif agent.committedValue != params['null_message_val'] and len(agent.last_action_etc.keys()) == 0:
                     pass 
             
-            next_o, r_list, d_list, info_n_list, sim_done, safety_violation = env.step(actions_list, v_list, logp_list, round_len)
+            next_o, r_list, d_list, info_n_list, sim_done, safety_violation, delay_termination, safety_termination = env.step(actions_list, v_list, logp_list, round_len)
             if round_len == 2:
                 if env.byzantine_agents[0].prevActionString == env.byzantine_agents[0].actionString:
                     same_action+=1
@@ -259,13 +263,21 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 if not agent.isByzantine:
                     single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.action))
                 else:
-                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actions))
+                    # IF want to see state:
+                    # single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.state, agent.actions))
+                    single_run_trajectory_log['Byz-'+str(agent.isByzantine)+'_agent-'+str(agent.agentId)].append((agent.actions))
 
            
            ## Print out safety violation
             if safety_violation:
                 currSimSafetyViolation = True
                 safetyViolations+=1
+            if delay_termination:
+                currSimDelayTermination = True
+                delayTerminations+=1
+            if safety_termination:
+                currSimBothViolate = True
+                violateBoth+=1
                 
 
             for ind, agent in enumerate(env.agents):
@@ -301,7 +313,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
 
                 if sim_done and round_len <= 5 and not currSimSafetyViolation:
                     honest_wins+=1
-                if (sim_done and round_len > 5) or currSimSafetyViolation:
+                if (sim_done and round_len > 5) or currSimSafetyViolation or currSimDelayTermination:
                     byzantine_wins+=1
                 # if len(set(comm_values)) is 1:
                 #     honest_wins+=1
@@ -335,6 +347,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
                 rounds+= round_len
                 round_len = 0
                 currSimSafetyViolation = False
+                currSimDelayTermination = False
+                currSimBothViolate = False
                 prev_ep_trajectory_log = curr_ep_trajectory_log[:]
                 curr_ep_trajectory_log.append(single_run_trajectory_log)
                 single_run_trajectory_log = setup_trajectory_log(env.allAgents)
@@ -351,9 +365,9 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
             print("number of sims: ", sims)
             print('---------')
             print("action dic:")
-            for k, v in byzantine_action_dic.items():
-                print(k, v)
-                print('---------')
+            # for k, v in byzantine_action_dic.items():
+            #     print(k, v)
+            #     print('---------')
             print('=============================')
         # Save model
         if epoch == epochs-1:
@@ -369,6 +383,8 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
         logger.log_tabular('HonestWinPercentage', honest_wins/sims)
         logger.log_tabular('AverageRounds', rounds/sims)
         logger.log_tabular('SafetyViolations', safetyViolations)
+        logger.log_tabular('DelayTermination', delayTerminations)
+        logger.log_tabular('Safety+Termination', violateBoth)
         logger.log_tabular('EpRet', with_min_and_max=True)
         logger.log_tabular('EpLen', average_only=True)
         logger.log_tabular('VVals', with_min_and_max=True)

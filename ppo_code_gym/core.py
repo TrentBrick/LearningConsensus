@@ -72,9 +72,9 @@ class MLPCategoricalActor(Actor):
     def _distribution(self, obs):
         logits = self.logits_net(obs)
         obs_numpy = obs.numpy().tolist()
-        for index in range(5,14):
-            if obs_numpy[index] == 1:
-                logits[index-5] = 0
+        # for index in range(7,71):
+        #     if obs_numpy[index] == 1:
+        #         logits[index-7] = 0
         # print("new logits are: ", logits)
         return Categorical(logits=logits)
 
