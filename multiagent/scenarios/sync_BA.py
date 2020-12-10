@@ -62,6 +62,8 @@ class Scenario(BaseScenario):
         sim_done = False
         reward_list = []
         safety_violation = False
+        delay_termination = False
+        safety_termination = False
 
         oneCount = 0
         zeroCount = 0
@@ -116,12 +118,17 @@ class Scenario(BaseScenario):
                 #If one agent has committed and the other hasn't, give a reward
                 if (2 in comm_values) and (1 in comm_values or 0 in comm_values):
                     byz_agent.reward += params['termination_reward']
-                elif len(set(comm_values)) == 1 and 2 in comm_values:
+                    delay_termination = True
+                if len(set(comm_values)) == 1 and 2 in comm_values:
                     byz_agent.reward += params['termination_reward_partial']
-                elif 1 in comm_values and 0 in comm_values:
+                    delay_termination = True
+                if 1 in comm_values and 0 in comm_values:
                     byz_agent.reward += params['safety_reward']
                     safety_violation = True
-                elif (len(set(comm_values)) == 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
+                    if curr_sim_len == 8:
+                        safety_termination = True
+                        # byz_agent.reward += 2000
+                if (len(set(comm_values)) == 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
                     sim_done = True
             if all_committed:
@@ -134,7 +141,7 @@ class Scenario(BaseScenario):
         # if curr_sim_len == params['max_round_len']:
         #     sim_done = True
 
-        return sim_done, reward_list, safety_violation
+        return sim_done, reward_list, safety_violation, delay_termination, safety_termination
 
     def observation(self, agent, world):
         return agent.state

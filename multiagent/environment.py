@@ -110,8 +110,8 @@ class MultiAgentEnv(gym.Env):
 
         # Record if the leader has equivocated
         if (curr_sim_len%4 == 2 or curr_sim_len%4 == 3) and self.leader.isByzantine and 'v-0' in self.leader.actionString and 'v-1' in self.leader.actionString:
-            self.world.byzantineEquivocate = True
-            # pass
+            # self.world.byzantineEquivocate = True
+            pass
 
         # Check if Byzantine Agent did not propose correct value
         if self.leader.isByzantine and curr_sim_len == 6: 
@@ -137,7 +137,7 @@ class MultiAgentEnv(gym.Env):
         # advance world state
         self.world.step(curr_sim_len, self.iteration)
         # record reward for each agent
-        sim_done, reward_n, safety_violation = self._get_reward(curr_sim_len)
+        sim_done, reward_n, safety_violation, delay_termination, safety_termination = self._get_reward(curr_sim_len)
         # record observation for each agent
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
@@ -160,7 +160,7 @@ class MultiAgentEnv(gym.Env):
                 agent.statusValues = []
                 agent.proposal = self.params['null_message_val']
 
-        return obs_n, reward_n, done_n, info_n, sim_done, safety_violation
+        return obs_n, reward_n, done_n, info_n, sim_done, safety_violation, delay_termination, safety_termination
 
     def reset(self):
         # reset world

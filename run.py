@@ -95,9 +95,9 @@ def initialize_parameters():
     parser.add_argument("--additional_round_reward", action ='store', type=float, default = [0.3], nargs='+')
     parser.add_argument("--no_equivocation_reward", action ='store', type=float, default = [.3], nargs='+')
     parser.add_argument("--equivocation_penalty", action ='store', type=float, default = [-25], nargs='+')
-    parser.add_argument("--termination_reward", action='store', type=float, default=[25], nargs='+')
+    parser.add_argument("--termination_reward", action='store', type=float, default=[200], nargs='+')
     parser.add_argument("--termination_reward_partial", action='store', type=float, default=[5], nargs='+')
-    parser.add_argument("--safety_reward", action='store', type=float, default=[200], nargs='+')
+    parser.add_argument("--safety_reward", action='store', type=float, default=[25], nargs='+')
 
 
     #parser.add_argument("--consistency_violation", action ='store', type=str, default = [-1,1], nargs='+')
