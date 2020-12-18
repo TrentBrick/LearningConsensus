@@ -96,7 +96,7 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     setup_pytorch_for_mpi()
 
     # Set up logger and save configuration
-    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp99-syncBA-5Agents-notify-noEquiv-Termination")
+    logger = EpochLogger(output_dir="/Users/yash/Documents/consensus/experiments/exp111-syncBA-5Agents-notify-noEquiv2000-CartProduct-300-150-150-75")
     logger.save_config(locals())
 
     # Random seed
@@ -113,7 +113,6 @@ def ppo(env_fn, params, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed
     print(env.observation_space)
     print(env.action_space)
     # Create actor-critic module
-    # ac = torch.load('/tmp/experiments/exp46-syncBA-3Round-equiv/pyt_save/model.pt')
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
 
     # Sync params across processes

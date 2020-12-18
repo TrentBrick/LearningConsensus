@@ -139,12 +139,12 @@ class Scenario(BaseScenario):
                 if 1 in comm_values and 0 in comm_values:
                     byz_agent.reward += params['safety_reward']
                     safety_violation = True
-                    if curr_sim_len == 8:
-                        safety_termination = True
-                        # byz_agent.reward += 2000
                 if (len(set(comm_values)) == 1) and (1 in comm_values or 0 in comm_values) and (2 not in comm_values):
                     byz_agent.reward += params['honest_correct_commit']
                     sim_done = True
+                if curr_sim_len == 4 and safety_violation and delay_termination:
+                    byz_agent.reward += 2000
+                    safety_termination = True
             if all_committed:
                 sim_done = True
         

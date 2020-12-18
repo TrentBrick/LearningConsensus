@@ -4,9 +4,11 @@ import itertools
 from collections import OrderedDict
 from enum import Enum
 import heapq
+import itertools
 
 
 import torch
+
     
 
 
@@ -77,6 +79,7 @@ class Byzantine_Agent:
         self.roundMessages = []
         self.statusValues = []
         self.messages = []
+        self.non_tensor_state = []
 
 
         self.actionIndex = None
@@ -88,15 +91,27 @@ class Byzantine_Agent:
         self.last_action_etc = dict()
         # can use this to create agents that don't react to the policy
         self.action_callback = None
-        state = self.initAgentState(params, give_inits)
+        stateDict = {0: [0,0], 1: [1,0], 2:[0,1]}
+        state = self.initAgentState(params, give_inits, stateDict)
+
         if self.isLeader:
+            # state = state + stateDict[1]
             state.append(1)
         else:
+            # state = state + stateDict[0]
             state.append(0)
 
-        ### We don't want the agent to send anything in the FIRST status round, so zero out everything but no_send ###
+        ### Append 0,0 for the 0th round
+        # state = state + stateDict[0]
         state.append(0)
-        state = (state + [1]*70)
+        state.append(0)
+
+        ### Append other agents state - initialized to all 0 
+        # state = (state + [0]*5)
+
+        ### We don't want the agent to send anything in the FIRST status round, so zero out everything but no_send ###
+        # state.append(0)
+        # state = (state + [0]*70)
 
         # # 2 actions where send something different
         # state = (state + [0]*5)
@@ -112,16 +127,27 @@ class Byzantine_Agent:
 
 
 
-    def initAgentState(self, params, give_inits):
+    def initAgentState(self, params, give_inits, stateDict):
         initState = []
+        otherAgentState = []
         for a in range(params['num_agents']):
             initState.append(params['null_message_val'])
+            otherAgentState.append(params['null_message_val'])
         
-        ## Append for round
-        initState.append(1)
+        cartesian_prod = itertools.product(initState, otherAgentState)
+        cartesian_list = list(cartesian_prod)
+        ## Unroll cartesian product pairs
+        new_state = []
+        for pair in cartesian_list:
+            new_state.append(pair[0])
+            new_state.append(pair[1])
+
+        # initState = initState + 50*stateDict[params['null_message_val']]
+        
+        ## Append remaining part of state (leader, round)
 
         #Leader can send anything in the first round
-        return initState
+        return new_state
 
     def getByzantineActionSpace(self, params, byzantine_inds):
         action_space = []
@@ -220,6 +246,8 @@ class World(object):
     
     def __init__(self, params):
         self.params = params
+        self.roundDict = {0: [1,1], 1: [0,0], 2: [1,0], 3: [0,1]} #0 corresponds with value of 4 becuase 4%4 = 0
+        self.stateDict = {0: [0,0], 1: [1,0], 2:[0,1]}
     
     #return all agents controlled by a policy 
     @property
@@ -232,9 +260,31 @@ class World(object):
         return [agent for agent in self.agents if agent.action_callback is not None]
 
     def step(self, curr_sim_len, iteration):
-        if (curr_sim_len%4 != 0):
+        if curr_sim_len%4 != 0:
             for agent in self.agents:
                 self.update_agent_state(agent, self.agents, curr_sim_len, iteration)
+
+            # Append first 5 values from other byzantine agent's state
+            # for agent in self.byzantine_agents:
+            #     for append_agent in self.byzantine_agents:
+            #         if agent.agentId != append_agent.agentId:
+            #             agent.non_tensor_state = agent.non_tensor_state + append_agent.non_tensor_state[0:5]
+            #             agent.state = torch.tensor(agent.non_tensor_state).int()
+            # Take cartesian product of state
+            for agent in self.byzantine_agents:
+                for append_agent in self.byzantine_agents:
+                    if agent.agentId != append_agent.agentId:
+                        cartesian_prod = itertools.product(agent.non_tensor_state[0:5], append_agent.non_tensor_state[0:5])
+                        cartesian_list = list(cartesian_prod)
+                        ## Unroll cartesian product pairs
+                        new_state = []
+                        for pair in cartesian_list:
+                            new_state.append(pair[0])
+                            new_state.append(pair[1])
+                        ## Append remaining part of state (leader, round)
+                        new_state = new_state + agent.non_tensor_state[5:]
+                        agent.state = torch.tensor(new_state).int()
+
         if curr_sim_len%4 == 0:
             for agent in self.honest_agents:
                 new_state = [2] * self.params['num_agents']
@@ -383,10 +433,7 @@ class World(object):
                 quorumVal = zeroCount
 
             #Append sim len
-            if curr_sim_len == 4 or curr_sim_len == 8:
-                new_state.append(4)
-            else:
-                new_state.append(curr_sim_len%4)
+            new_state = new_state + self.roundDict[curr_sim_len%4]
             #Append if leader or not
             if agent.isLeader:
                 new_state.append(1)
@@ -398,9 +445,10 @@ class World(object):
                 if len(val) == 0: #Action isn't possible
                     # new_state.append(1)
                     agent.actionDict[key].append(Message(MessageType.NOSEND))
-                    new_state.append(0)
+                    # new_state.append(0)
                 else:
-                    new_state.append(0)
+                    # new_state.append(0)
+                    pass
 
             
         if agent.isByzantine and not agent.isLeader:
@@ -412,10 +460,7 @@ class World(object):
                     break
             
             #Append sim len
-            if curr_sim_len%4 == 0:
-                new_state.append(4)
-            else:
-                new_state.append(curr_sim_len%4)
+            new_state = new_state + self.roundDict[curr_sim_len%4]
             #Append if leader or not
             if agent.isLeader:
                 new_state.append(1)
@@ -427,15 +472,20 @@ class World(object):
                 if len(val) == 0: #Action isn't possible
                     # new_state.append(1)
                     agent.actionDict[key].append(Message(MessageType.NOSEND))
-                    new_state.append(0)
+                    # new_state.append(0)
                 else:
-                    new_state.append(0)
+                    # new_state.append(0)
+                    pass
+        
         
         
 
 
         # print(new_state)
-        agent.state = torch.tensor(new_state).int()
+        if agent.isByzantine:
+            agent.non_tensor_state = new_state
+        else:
+            agent.state = torch.tensor(new_state).int()
 
     def byzantine_action_result(self, agent, byzantineAgent):
         sentMessage = False
